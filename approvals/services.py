@@ -63,17 +63,41 @@ class WorkflowEngine:
 
         snapshot = []
         for level in sorted(candidates_by_level):
-            # Règle la plus spécifique = celle avec le plus de critères
-            best_rule = max(candidates_by_level[level], key=lambda r: len(r.criteria))
-            snapshot.append(
-                {
-                    "level": level,
-                    "rule_id": best_rule.id,
-                    "approver_ids": self._resolve_approvers(best_rule.approvers_config),
-                    "status": "waiting",
+            candidates = candidates_by_level[level]
+            best_rule, tied_rule_ids = self._resolve_conflict(candidates)
+            entry = {
+                "level": level,
+                "rule_id": best_rule.id,
+                "approver_ids": self._resolve_approvers(best_rule.approvers_config),
+                "status": "waiting",
+            }
+            if tied_rule_ids:
+                # Plusieurs règles actives, également spécifiques, correspondaient à ce
+                # niveau (cf. Manuel d'Administration §4.3) : conservé pour audit, à
+                # signaler à l'admin fonctionnel pour clarifier la configuration.
+                entry["conflict"] = {
+                    "selected_rule_id": best_rule.id,
+                    "tied_rule_ids": tied_rule_ids,
+                    "resolution": "most_recently_updated",
                 }
-            )
+            snapshot.append(entry)
         return snapshot
+
+    @staticmethod
+    def _resolve_conflict(candidates):
+        """Choisit la règle applicable parmi celles qui correspondent au même niveau.
+
+        Règle la plus spécifique (le plus de critères) gagne (cf. Manuel
+        d'Administration §4.3). En cas d'égalité de spécificité, la règle
+        modifiée le plus récemment prime — choix déterministe et explicable
+        à l'admin ("c'est la dernière que j'ai configurée"), plutôt qu'un
+        ordre arbitraire dépendant de l'ID ou de l'itération.
+        """
+        ordered = sorted(candidates, key=lambda r: (-len(r.criteria), -r.updated_at.timestamp()))
+        best = ordered[0]
+        top_specificity = len(best.criteria)
+        tied = [r.id for r in ordered[1:] if len(r.criteria) == top_specificity]
+        return best, tied
 
     def _matches(self, criteria):
         if not criteria:

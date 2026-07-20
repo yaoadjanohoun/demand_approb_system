@@ -83,6 +83,40 @@ class ApprovalRule(models.Model):
         if self.level < 1:
             raise ValidationError({"level": "Le niveau doit être supérieur à 0."})
 
+        if self.is_active and self.request_type_id:
+            duplicate = (
+                ApprovalRule.objects.filter(
+                    request_type_id=self.request_type_id, level=self.level, is_active=True
+                )
+                .exclude(pk=self.pk)
+                .filter(criteria=self.criteria)
+                .exists()
+            )
+            if duplicate:
+                raise ValidationError(
+                    "Une autre règle active existe déjà pour ce type de demande, ce niveau "
+                    "et exactement les mêmes conditions. Modifiez les conditions de l'une des "
+                    "deux règles ou désactivez-en une."
+                )
+
+    def specificity(self):
+        """Nombre de conditions de la règle. Sert à départager les règles qui se
+        chevauchent (cf. Manuel d'Administration §4.3) : la plus spécifique gagne."""
+        return len(self.criteria or {})
+
+    def is_default(self):
+        return not self.criteria
+
+    def overlapping_rules(self):
+        """Autres règles actives du même type/niveau dont les conditions ont la
+        même spécificité — signale une ambiguïté que l'admin doit trancher."""
+        if not self.request_type_id:
+            return ApprovalRule.objects.none()
+        candidates = ApprovalRule.objects.filter(
+            request_type_id=self.request_type_id, level=self.level, is_active=True
+        ).exclude(pk=self.pk)
+        return [r for r in candidates if r.specificity() == self.specificity()]
+
     def __str__(self):
         return f"{self.request_type.code} - niveau {self.level}"
 

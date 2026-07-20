@@ -71,10 +71,25 @@ class ApprovalRuleInline(NamedFieldWidgetMixin, admin.TabularInline):
 @admin.register(RequestType)
 class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
     field_widgets = {"form_schema": FormSchemaBuilderWidget}
-    list_display = ("name", "code", "is_active", "schema_version", "resume_on_resubmit", "is_sensitive")
+    list_display = (
+        "name", "code", "is_active", "schema_version", "resume_on_resubmit",
+        "is_sensitive", "default_rule_display",
+    )
     list_filter = ("is_active", "is_sensitive")
     search_fields = ("name", "code")
     inlines = [ApprovalRuleInline]
+
+    @display(description="Règle par défaut (dernier niveau)", boolean=True)
+    def default_rule_display(self, obj):
+        """Signale l'absence de règle "par défaut" (sans condition) au dernier
+        niveau d'approbation actif — recommandation du Manuel d'Administration
+        §4.3 pour éviter que des demandes non couvertes par les règles
+        spécifiques ne sautent silencieusement ce niveau."""
+        active_rules = list(obj.approval_rules.filter(is_active=True))
+        if not active_rules:
+            return True  # rien à signaler : aucune règle configurée
+        last_level = max(r.level for r in active_rules)
+        return any(r.level == last_level and r.is_default() for r in active_rules)
     fieldsets = (
         ("Identification", {"fields": ("name", "code", "is_active")}),
         (
@@ -108,7 +123,7 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
 @admin.register(ApprovalRule)
 class ApprovalRuleAdmin(NamedFieldWidgetMixin, ModelAdmin):
     field_widgets = {"criteria": CriteriaBuilderWidget, "approvers_config": ApproversConfigBuilderWidget}
-    list_display = ("request_type", "level", "is_active", "created_by", "updated_at")
+    list_display = ("request_type", "level", "is_active", "conflict_display", "created_by", "updated_at")
     list_filter = ("request_type", "is_active", "level")
     autocomplete_fields = ("created_by",)
     fieldsets = (
@@ -129,6 +144,15 @@ class ApprovalRuleAdmin(NamedFieldWidgetMixin, ModelAdmin):
         ),
         ("Traçabilité", {"fields": ("created_by",)}),
     )
+
+    @display(description="Conflit potentiel")
+    def conflict_display(self, obj):
+        if not obj.is_active:
+            return "—"
+        overlapping = obj.overlapping_rules()
+        if not overlapping:
+            return "—"
+        return f"⚠ {len(overlapping)} règle(s) à la même spécificité"
 
     def save_model(self, request, obj, form, change):
         if not obj.created_by_id:
