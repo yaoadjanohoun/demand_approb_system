@@ -12,6 +12,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 
+from django.urls import reverse_lazy
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -31,12 +33,15 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    'unfold',  # doit précéder django.contrib.admin
+    'unfold.contrib.filters',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_json_widget',
     'approvals',
 ]
 
@@ -120,3 +125,77 @@ STATIC_URL = 'static/'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'approvals:dashboard'
 LOGOUT_REDIRECT_URL = 'login'
+
+UNFOLD = {
+    "SITE_TITLE": "Administration — Demandes & Approbation",
+    "SITE_HEADER": "Demandes & Approbation",
+    "SITE_SYMBOL": "rule",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": False,
+    "LOGIN": {
+        "image": None,
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "navigation": [
+            {
+                "title": "Configuration des demandes",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Types de demandes",
+                        "icon": "description",
+                        "link": reverse_lazy("admin:approvals_requesttype_changelist"),
+                    },
+                    {
+                        "title": "Règles d'approbation",
+                        "icon": "rule",
+                        "link": reverse_lazy("admin:approvals_approvalrule_changelist"),
+                    },
+                    {
+                        "title": "Délégations",
+                        "icon": "swap_horiz",
+                        "link": reverse_lazy("admin:approvals_delegation_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Suivi",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Demandes",
+                        "icon": "assignment",
+                        "link": reverse_lazy("admin:approvals_request_changelist"),
+                    },
+                    {
+                        "title": "Journal d'audit",
+                        "icon": "history",
+                        "link": reverse_lazy("admin:approvals_approvallog_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Organisation",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Profils utilisateur",
+                        "icon": "badge",
+                        "link": reverse_lazy("admin:approvals_userprofile_changelist"),
+                    },
+                    {
+                        "title": "Utilisateurs",
+                        "icon": "group",
+                        "link": reverse_lazy("admin:auth_user_changelist"),
+                    },
+                    {
+                        "title": "Groupes",
+                        "icon": "groups",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+}

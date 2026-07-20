@@ -1,7 +1,5 @@
 """Moteur de routage des demandes (voir "Diagrammes de Flux.txt").
 
-Politique de snapshot appliquée (voir "Manuel d'Administration Fonctionnel"
-et "Diagrammes de Flux.txt" §2) :
 - À la soumission, le moteur évalue les ApprovalRule actives et fige la liste
   nominale des approbateurs de CHAQUE niveau dans Request.snapshot_metadata.
   Une modification ultérieure des règles n'affecte plus cette demande.
@@ -65,7 +63,7 @@ class WorkflowEngine:
 
         snapshot = []
         for level in sorted(candidates_by_level):
-            # Règle la plus spécifique = celle avec le plus de critères (cf. Manuel Admin §4.3)
+            # Règle la plus spécifique = celle avec le plus de critères
             best_rule = max(candidates_by_level[level], key=lambda r: len(r.criteria))
             snapshot.append(
                 {

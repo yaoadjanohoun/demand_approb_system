@@ -1,51 +1,155 @@
 from django.contrib import admin
+from django.db import models
+from django_json_widget.widgets import JSONEditorWidget
+from unfold.admin import ModelAdmin
+from unfold.decorators import display
 
 from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
+
+STATUS_LABELS = {
+    "Brouillon": "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100",
+    "En attente": "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-200",
+    "Approuvée": "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-200",
+    "Refusée": "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-200",
+    "Retournée": "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200",
+}
+
+
+class JSONWidgetMixin:
+    """Remplace le textarea JSON brut par un éditeur visuel (arbre + JSON)."""
+
+    formfield_overrides = {
+        models.JSONField: {"widget": JSONEditorWidget},
+    }
 
 
 #création du profil admin
 @admin.register(UserProfile)
-class UserProfileAdmin(admin.ModelAdmin):
+class UserProfileAdmin(ModelAdmin):
     list_display = ("user", "manager", "department_id", "site_id", "country_code")
     search_fields = ("user__username",)
+    autocomplete_fields = ("user", "manager")
+
+
+class ApprovalRuleInline(admin.TabularInline):
+    model = ApprovalRule
+    # extra=1 : la ligne est pré-rendue au chargement de la page, ce qui est nécessaire
+    # pour que l'éditeur JSON s'initialise (django-json-widget ne s'active pas sur les
+    # lignes ajoutées dynamiquement via "Add another" dans un inline). Pour ajouter
+    # d'autres règles au même type, utiliser la page "Règles d'approbation".
+    extra = 1
+    fields = ("level", "is_active", "criteria", "approvers_config", "created_by")
+    formfield_overrides = {models.JSONField: {"widget": JSONEditorWidget}}
 
 
 #creation du modele de requete d'approbation d'un type admin
 @admin.register(RequestType)
-class RequestTypeAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "is_active", "schema_version", "resume_on_resubmit")
+class RequestTypeAdmin(JSONWidgetMixin, ModelAdmin):
+    list_display = ("name", "code", "is_active", "schema_version", "resume_on_resubmit", "is_sensitive")
     list_filter = ("is_active", "is_sensitive")
     search_fields = ("name", "code")
+    inlines = [ApprovalRuleInline]
+    fieldsets = (
+        ("Identification", {"fields": ("name", "code", "is_active")}),
+        (
+            "Formulaire de la demande",
+            {
+                "fields": ("form_schema", "schema_version"),
+                "description": (
+                    "Définit les champs proposés au demandeur. "
+                    'Ex: {"fields": [{"name": "montant", "type": "decimal", "label": "Montant", "required": true}]}'
+                ),
+            },
+        ),
+        (
+            "Options avancées",
+            {"fields": ("resume_on_resubmit", "is_sensitive")},
+        ),
+    )
+
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        for obj in instances:
+            if isinstance(obj, ApprovalRule) and not obj.created_by_id:
+                obj.created_by = request.user
+            obj.save()
+        formset.save_m2m()
 
 
 # creation de modèle des règles d'approbation d'un compte admin
 @admin.register(ApprovalRule)
-class ApprovalRuleAdmin(admin.ModelAdmin):
+class ApprovalRuleAdmin(JSONWidgetMixin, ModelAdmin):
     list_display = ("request_type", "level", "is_active", "created_by", "updated_at")
     list_filter = ("request_type", "is_active", "level")
+    autocomplete_fields = ("created_by",)
+    fieldsets = (
+        ("Portée de la règle", {"fields": ("request_type", "level", "is_active")}),
+        (
+            "Conditions de déclenchement (criteria)",
+            {
+                "fields": ("criteria",),
+                "description": 'Ex: {"min_amount": 1000, "department_ids": [10, 12]}. Vide = règle par défaut, toujours applicable.',
+            },
+        ),
+        (
+            "Approbateur (approvers_config)",
+            {
+                "fields": ("approvers_config",),
+                "description": (
+                    'Ex: {"type": "manager"}, {"type": "user", "user_id": 5}, '
+                    '{"type": "group", "group_id": 2}.'
+                ),
+            },
+        ),
+        ("Traçabilité", {"fields": ("created_by",)}),
+    )
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by_id:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
 
 
 #cration de modeme des requetes d'admin
 @admin.register(Request)
-class RequestAdmin(admin.ModelAdmin):
-    list_display = ("id", "request_type", "requester", "status", "current_level", "submitted_at")
+class RequestAdmin(JSONWidgetMixin, ModelAdmin):
+    list_display = ("id", "request_type", "requester", "status_display", "current_level", "submitted_at")
     list_filter = ("status", "request_type")
     search_fields = ("id", "requester__username")
+    # Lecture seule : modifier une demande ici contournerait le moteur de routage
+    # (pas de recalcul du niveau, pas d'entrée dans ApprovalLog). Les décisions
+    # se prennent depuis l'interface de soumission/approbation.
+    readonly_fields = [f.name for f in Request._meta.fields]
+
+    @display(description="Statut", label=STATUS_LABELS)
+    def status_display(self, obj):
+        return obj.get_status_display()
+
+    def has_add_permission(self, request):
+        return False
 
 
 #creation de modèle de création de délégation par un admin.
 @admin.register(Delegation)
-class DelegationAdmin(admin.ModelAdmin):
-    list_display = ("delegator", "delegate", "start_date", "end_date", "is_active")
+class DelegationAdmin(ModelAdmin):
+    list_display = ("delegator", "delegate", "start_date", "end_date", "is_active_display", "scope")
     list_filter = ("start_date", "end_date")
+    autocomplete_fields = ("delegator", "delegate")
+    formfield_overrides = {models.JSONField: {"widget": JSONEditorWidget}}
 
+    @display(description="Active", boolean=True)
+    def is_active_display(self, obj):
+        return obj.is_active
 
 
 #cration de modele pour consulter les logs d'approbation admin
 @admin.register(ApprovalLog)
-class ApprovalLogAdmin(admin.ModelAdmin):
+class ApprovalLogAdmin(ModelAdmin):
     list_display = ("timestamp", "request", "actor", "action_type", "previous_status", "new_status")
     list_filter = ("action_type",)
+    search_fields = ("request__id", "actor__username")
     readonly_fields = [f.name for f in ApprovalLog._meta.fields]
 
     def has_add_permission(self, request):
@@ -56,5 +160,3 @@ class ApprovalLogAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
-
-
