@@ -227,6 +227,9 @@ class WorkflowEngine:
     # ------------------------------------------------------------------
     # Décisions
     # ------------------------------------------------------------------
+
+    #appronbation
+
     def approve(self, actor, comment=""):
         request = self.request
         if request.status != Request.Status.PENDING:
@@ -257,6 +260,8 @@ class WorkflowEngine:
             )
         return request
 
+    #demande rejetée
+
     def reject(self, actor, comment):
         if not comment:
             raise RoutingError("Un motif est obligatoire pour refuser une demande.")
@@ -274,6 +279,8 @@ class WorkflowEngine:
         request.save()
         self._log(actor, ApprovalLog.ActionType.REJECT, previous_status, request.status, comment=comment)
         return request
+
+#demande retourée
 
     def return_for_info(self, actor, comment):
         if not comment:
@@ -296,6 +303,7 @@ class WorkflowEngine:
     # Intervention administrative (cf. Manuel d'Administration §6.1 : demande
     # bloquée car l'approbateur a quitté l'entreprise sans délégation, etc.)
     # ------------------------------------------------------------------
+
     def force_advance(self, actor, comment):
         """Force le passage au niveau suivant sans validation individuelle."""
         if not comment:

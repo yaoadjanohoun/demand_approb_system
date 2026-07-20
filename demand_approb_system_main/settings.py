@@ -21,14 +21,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+#
+# En déploiement IIS, ces trois valeurs sont fournies par les variables
+# d'environnement du pool d'applications (<environmentVariables> dans
+# web.config — voir Les Spécifications Techniques §1.2 : la configuration ne
+# doit jamais être écrite en dur dans le code). Les valeurs par défaut
+# ci-dessous ne s'appliquent qu'au poste de développement local.
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-@f3cx=i6r=i3*llg0mx95+=w@x*a1ps%sz1%%qh*9_3q$f!-be'
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY', 'django-insecure-@f3cx=i6r=i3*llg0mx95+=w@x*a1ps%sz1%%qh*9_3q$f!-be'
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
 
 
 # Application definition
@@ -48,6 +56,10 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Sert les fichiers statiques directement depuis le processus applicatif :
+    # IIS n'a qu'un seul handler (HttpPlatformHandler) à configurer, pas de
+    # chemin virtuel /static/ séparé à mettre en place par la DSI.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -155,10 +167,62 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # peuplé par `manage.py collectstatic` au déploiement
+
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+    },
+}
+# En dev (DEBUG=True), sert aussi les fichiers directement depuis les apps
+# (STATICFILES_FINDERS) pour ne pas avoir à lancer collectstatic à chaque
+# changement de CSS/JS local.
+WHITENOISE_USE_FINDERS = DEBUG
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'approvals:dashboard'
 LOGOUT_REDIRECT_URL = 'login'
+
+# Logs applicatifs : jamais dans C:\Program Files, toujours dans le profil
+# utilisateur du compte de service (Les Spécifications Techniques §1.2 :
+# "Les fichiers de logs... doivent pointer vers %APPDATA%\NomApp\Logs").
+_LOG_DIR = Path(os.environ.get('APPDATA', BASE_DIR)) / 'demand_approb_system_main' / 'Logs'
+try:
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    _LOG_DIR = BASE_DIR / 'logs'
+    _LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {'format': '{asctime} {levelname} {name} {message}', 'style': '{'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'verbose'},
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': _LOG_DIR / 'app.log',
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 5,
+            'encoding': 'utf-8',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {'handlers': ['console', 'file'], 'level': 'WARNING'},
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'approvals': {'handlers': ['console', 'file'], 'level': 'INFO', 'propagate': False},
+    },
+}
 
 # Authentification Active Directory (voir "Les Spécifications Techniques" §1.1).
 # Backend LDAP en premier (aucun mot de passe local pour un compte AD), puis
