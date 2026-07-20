@@ -1,0 +1,133 @@
+Manuel d'Administration Fonctionnelle — Système de Demandes et d'Approbation
+Ce document est le guide opérationnel destiné aux Administrateurs Fonctionnels (RH, Finance, Managers). Il vous permet de configurer, modifier et superviser le système d'approbation sans aucune intervention technique ni ligne de code. 
+
+1. Introduction et Principes Clés
+1.1. Votre Rôle
+En tant qu'Administrateur Fonctionnel, vous êtes le seul habilité à :
+
+Créer de nouveaux types de demandes (ex: "Mission Internationale").
+Définir qui approuve quoi (règles de seuils, départements).
+Gérer les remplacements temporaires (absences).
+Consulter l'historique des modifications.
+1.2. Principe de "Snapshot" (Important)
+Règle d'Or : Toute modification de règle que vous faites aujourd'hui s'applique immédiatement aux nouvelles demandes.
+Stabilité : Les demandes déjà en cours ne sont pas affectées par vos changements. Elles continuent leur chemin avec les approbateurs qui étaient définis au moment de leur soumission. Cela garantit qu'une demande ne se retrouve jamais "orpheline" à cause d'une modification.
+
+Django admin custom dashboard for workflow management
+
+Tout afficher
+2. Accès à l'Interface d'Administration
+2.1. Connexion
+Ouvrez votre navigateur (Edge/Chrome) et accédez à l'URL interne fournie (ex: http://intranet/approbations).
+Identifiez-vous avec vos identifiants Microsoft (AD) habituels.
+Cliquez sur le bouton "Espace Administration" visible uniquement pour votre profil.
+2.2. Tableau de Bord
+L'écran d'accueil affiche :
+
+Le nombre de demandes en attente de configuration.
+Les règles récemment modifiées.
+Les alertes (ex: "Règle sans approbateur défini").
+3. Configuration des Types de Demandes
+Pour ajouter un nouveau processus (ex: "Achat Fournisseur IT"), suivez ces étapes :
+
+3.1. Créer un Nouveau Type
+Cliquez sur l'onglet "Types de Demandes" > "Nouveau".
+Remplissez les champs :
+Nom : "Achat Fournisseur IT" (Visible par tous).
+Code : PURCHASE_IT (Interne, unique).
+Actif : Cochez pour rendre le type disponible immédiatement.
+Définition du Formulaire (Schema) :
+C'est ici que vous définissez les questions posées au demandeur.
+Cliquez sur "Éditer le Formulaire".
+Ajoutez des champs via l'interface visuelle :
+Type : Nombre (pour le montant), Texte, Date, Fichier.
+Label : "Montant HT", "Nom du fournisseur", "Date souhaitée".
+Obligatoire : Cochez si le champ ne peut pas être vide.
+Validation : Le système teste automatiquement que le schema est valide avant sauvegarde. 
+
+Django dynamic form builder for non-technical admins site:reddit.com
+
+Tout afficher
+3.2. Modifier un Type Existant
+Sélectionnez le type dans la liste.
+Vous pouvez ajouter des champs, mais ne supprimez jamais un champ utilisé par des demandes en cours. Marquez-le plutôt comme "Obsolète" pour qu'il disparaisse des futurs formulaires tout en restant lisible dans l'historique.
+4. Gestion des Règles d'Approbation (Le Cœur du Système)
+C'est ici que vous définissez la logique : "Si Montant > 1000€ ET Département = IT, alors Approbateur = Directeur IT".
+
+4.1. Créer une Règle
+Onglet "Règles d'Approbation" > "Nouvelle Règle".
+Sélectionnez le Type de Demande concerné.
+Définissez le Niveau :
+1 : Premier niveau (ex: Manager N+1).
+2 : Deuxième niveau (ex: Directeur), etc.
+Configurez les Critères (Conditions) :
+Cliquez sur "Ajouter un critère".
+Choisissez le champ du formulaire (ex: montant).
+Choisissez l'opérateur (>, <, =, dans).
+Entrez la valeur (ex: 5000).
+Astuce : Vous pouvez cumuler les critères (ex: Montant > 1000 ET Département = 'Vente').
+Assignez les Approbateurs :
+Choisissez le mode de résolution :
+Utilisateur spécifique : Toujours la même personne (ex: DAF).
+Rôle/Fonction : La personne occupant le poste "Responsable RH" (dynamique).
+Manager du demandeur : Remonte automatiquement au N+1.
+Groupe : N'importe quel membre du groupe "Comité de Direction" peut valider.
+Sauvegardez. La règle est active immédiatement.
+4.2. Modifier une Règle
+Recherchez la règle dans la liste.
+Modifiez le seuil (ex: passez de 1000€ à 1500€) ou changez l'approbateur.
+Historique : Le système enregistre automatiquement qui a fait le changement, quand, et quelle était l'ancienne valeur. Vous pouvez consulter cet historique via le bouton "Voir l'Audit" sur la fiche de la règle.
+
+Django admin audit log view for rule changes
+
+Tout afficher
+4.3. Gérer les Conflits et Priorités
+Si deux règles semblent se chevaucher, le système applique la règle la plus spécifique (celle avec le plus de critères).
+En cas d'égalité, la règle avec le niveau le plus élevé prime.
+Recommandation : Créez toujours une règle "Par Défaut" (sans critères) en dernier niveau pour capturer toutes les demandes non traitées par les règles spécifiques.
+5. Gestion des Absences et Délégations
+Pour assurer la continuité lors des congés ou maladies.
+
+5.1. Définir un Remplaçant
+Onglet "Délégations" > "Nouvelle Délégation".
+Délégant : La personne absente (ex: Jean Dupont).
+Délégué : Le remplaçant (ex: Marie Curie).
+Période : Date de début et de fin.
+Automatisme : La délégation s'active et se désactive toute seule aux dates prévues.
+Périmètre (Optionnel) :
+Laissez vide pour une délégation totale (tous les types de demandes).
+Ou sélectionnez des types spécifiques (ex: "Uniquement les Congés").
+Validation : Le système vérifie que le remplaçant n'est pas lui-même absent sur cette période.
+5.2. Cas d'Urgence (Absence Imprévue)
+Si un utilisateur est absent sans délégation prévue, un administrateur peut créer une délégation rétroactive. Les demandes en attente de l'absent seront immédiatement visibles par le remplaçant.
+
+Django temporary delegation workflow management
+
+Tout afficher
+6. Supervision et Rapports
+6.1. Suivi des Demandes
+L'onglet "Toutes les Demandes" permet de filtrer par statut, type, demandeur ou date.
+Pour chaque demande, vous pouvez voir le Cheminement Actuel (Qui a validé, qui doit valider).
+Action Administrative : En cas de blocage exceptionnel (ex: approbateur parti sans délégation), vous pouvez forcer le passage au niveau suivant ou réassigner manuellement la tâche via le bouton "Intervenir" (action journalisée).
+6.2. Statistiques
+Accédez à l'onglet "Rapports" pour visualiser :
+Temps moyen d'approbation par département.
+Taux de refus par type de demande.
+Volume de demandes par mois.
+Export : Un bouton "Exporter Excel" est disponible sur toutes les listes pour analyse approfondie dans Power BI.
+7. Dépannage et Bonnes Pratiques
+7.1. Que faire si... ?
+...une demande reste bloquée "En Attente" depuis 5 jours ?
+Vérifiez si l'approbateur est en congé (Onglet Délégations).
+Vérifiez si une règle correspond bien à cette demande (Onglet Règles).
+Utilisez la fonction "Relancer l'approbateur" (envoi d'un email de rappel).
+...j'ai fait une erreur de configuration ?
+Corrigez la règle immédiatement.
+Pour les demandes déjà impactées (rare grâce au snapshot), contactez le support technique pour une réaffectation manuelle.
+7.2. Checklist avant Publication
+Avant de créer un nouveau type de demande ou une règle complexe :
+
+[ ] Avez-vous testé la configuration dans l'environnement de Pré-Production (Sandbox) ?
+[ ] Avez-vous défini une règle "Par Défaut" pour éviter les demandes orphelines ?
+[ ] Avez-vous prévenu les futurs approbateurs de leur nouveau rôle ?
+Ce manuel est un document vivant. Il est mis à jour à chaque évolution majeure de l'interface. La dernière version est toujours disponible dans la section "Aide" de l'application.

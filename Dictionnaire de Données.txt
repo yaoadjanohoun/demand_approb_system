@@ -1,0 +1,259 @@
+Dictionnaire de Données — Système de Demandes et d'Approbation
+Ce document définit la structure rigoureuse de la base de données, avec un accent particulier sur la modélisation des champs JSONField qui garantissent la flexibilité du système sans intervention du code.
+
+1. Principes Directeurs de Conception
+Hybridation Relationnelle/JSON : Les données stables et critiques (utilisateurs, statuts, dates) sont en colonnes relationnelles classiques.  Les données variables (critères de règles, schémas de formulaires, données de demande) sont encapsulées dans des JSONField validés.
+Validation par Schéma : Chaque JSONField est associé à un schéma de validation (JSON Schema ou Pydantic) pour empêcher la "dette technique déguisée" et garantir l'intégrité des données malgré la flexibilité. 
+Indexation Stratégique : Les clés JSON fréquemment interrogées (ex: montant, département) seront extraites en colonnes virtuelles générées pour l'indexation, assurant la performance. 
+
+Django JSONField validation best practices JSON Schema
+
+Tout afficher
+2. Catalogue des Modèles et Champs
+2.1. Modèle : RequestType (Type de Demande)
+Définit les catégories de demandes et la structure dynamique de leurs formulaires.
+
+Champ	Type	Contraintes	Description & Structure JSON
+id	AutoField	PK	Identifiant unique.
+name	CharField	Unique, Max 100	Nom affiché (ex: "Note de Frais", "Congés").
+code	CharField	Unique, Max 20	Code système (ex: "EXPENSE", "LEAVE").
+is_active	BooleanField	Default True	Active ou désactive le type de demande.
+form_schema	JSONField	Validé	Schéma du formulaire dynamique. Définit les champs à afficher au demandeur. 
+Structure JSON	Objet	Voir Schéma A	Ex: {"fields": [{"name": "montant", "type": "decimal", "required": true}, {"name": "motif", "type": "text"}]}
+created_at	DateTimeField	Auto	Date de création.
+
+Schéma de Validation A (form_schema) :
+
+{
+  "type": "object",
+  "required": ["fields"],
+  "properties": {
+    "fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "type"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z_]+$"},
+          "type": {"type": "string", "enum": ["text", "number", "decimal", "date", "boolean", "file"]},
+          "label": {"type": "string"},
+          "required": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}
+
+
+Django JSON Schema validation library for models
+
+Tout afficher
+2.2. Modèle : ApprovalRule (Règle d'Approbation)
+Cœur du moteur de routage. Définit QUI approuve QUOI sous QUELLES CONDITIONS. 
+
+Champ	Type	Contraintes	Description & Structure JSON
+id	AutoField	PK	Identifiant unique.
+request_type	ForeignKey	RequestType	Type de demande concerné.
+level	IntegerField	> 0	Niveau hiérarchique (1 = Manager, 2 = Directeur, etc.).
+is_active	BooleanField	Default True	Active la règle.
+criteria	JSONField	Validé	Conditions de déclenchement. Filtres dynamiques sur les données de la demande. 
+Structure JSON	Objet	Voir Schéma B	Ex: {"min_amount": 1000, "max_amount": 5000, "department_ids": [10, 12], "site_id": 5}
+approvers_config	JSONField	Validé	Configuration des approbateurs. Définit la logique de résolution (Rôle, Groupe, Utilisateur spécifique). 
+Structure JSON	Objet	Voir Schéma C	Ex: {"type": "role", "role_id": 5} ou {"type": "manager_of_requester"}
+created_by	ForeignKey	User	Auteur de la règle (traçabilité).
+
+Schéma de Validation B (criteria) :
+
+{
+  "type": "object",
+  "properties": {
+    "min_amount": {"type": "number"},
+    "max_amount": {"type": "number"},
+    "department_ids": {"type": "array", "items": {"type": "integer"}},
+    "site_id": {"type": "integer"},
+    "country_code": {"type": "string", "length": 2}
+  },
+  "additionalProperties": false
+}
+
+Schéma de Validation C (approvers_config) :
+
+{
+  "type": "object",
+  "required": ["type"],
+  "properties": {
+    "type": {"type": "string", "enum": ["user", "group", "role", "manager", "custom"]},
+    "user_id": {"type": "integer"},
+    "group_id": {"type": "integer"},
+    "role_id": {"type": "integer"},
+    "fallback_user_id": {"type": "integer"}
+  }
+}
+
+
+Django dynamic query filtering from JSONField criteria
+
+Tout afficher
+2.3. Modèle : Request (Demande)
+Instance concrète d'une demande soumise par un utilisateur. 
+
+Champ	Type	Contraintes	Description & Structure JSON
+id	UUIDField	PK	Identifiant unique (UUID pour sécurité).
+request_type	ForeignKey	RequestType	Référence au type de demande.
+requester	ForeignKey	User	Demandeur.
+status	CharField	Choices	DRAFT, PENDING, APPROVED, REJECTED, RETURNED.
+current_level	IntegerField	Default 1	Niveau d'approbation actuel.
+data	JSONField	Validé	Données de la demande. Contient les valeurs saisies dans le formulaire dynamique. 
+Structure JSON	Objet	Dynamique	Dépend du form_schema du RequestType. Ex: {"montant": 1200.50, "motif": "Achat logiciel", "date_debut": "2026-08-01"}
+snapshot_metadata	JSONField	Nullable	Copie des métadonnées au moment de la soumission (Département, Site, Manager) pour éviter les dérives si l'org change.
+submitted_at	DateTimeField	Nullable	Date de soumission.
+completed_at	DateTimeField	Nullable	Date de décision finale.
+
+Règle de Validation data : Le contenu de ce champ est validé dynamiquement au moment du save() en comparant les clés avec le champ form_schema du RequestType associé. 
+
+2.4. Modèle : Delegation (Délégation / Remplacement)
+Gère les absences temporaires et le routage vers les suppléants.
+
+Champ	Type	Contraintes	Description
+id	AutoField	PK	Identifiant unique.
+delegator	ForeignKey	User	L'approbateur absent.
+delegate	ForeignKey	User	Le remplaçant.
+start_date	DateField	Not Null	Début de la délégation.
+end_date	DateField	Not Null	Fin de la délégation.
+scope	JSONField	Nullable	Limite la délégation à certains types de demandes. Si nul, délégation totale.
+Structure JSON	Objet	{"request_type_ids": [1, 5]}	
+is_active	BooleanField	Computed	Vrai si start_date <= Aujourd'hui <= end_date.
+
+2.5. Modèle : ApprovalLog (Historique d'Audit)
+Journal immuable de toutes les actions et changements. 
+
+Champ	Type	Contraintes	Description
+id	BigAutoField	PK	Identifiant unique.
+request	ForeignKey	Request	Demande concernée.
+actor	ForeignKey	User	Utilisateur ayant effectué l'action.
+action_type	CharField	Choices	SUBMIT, APPROVE, REJECT, RETURN, RULE_CHANGE, DELEGATION_TRIGGERED.
+comment	TextField	Nullable	Commentaire de l'approbateur.
+previous_status	CharField	Nullable	Statut avant l'action.
+new_status	CharField	Nullable	Statut après l'action.
+context	JSONField	Nullable	Contexte technique. Ex: {"rule_id": 45, "delegation_id": 12, "ip_address": "192.168.1.1"}.
+timestamp	DateTimeField	Auto	Horodatage précis de l'action.
+
+
+Django immutable audit log implementation patterns
+
+Tout afficher
+3. Stratégie d'Indexation et Performance
+Pour garantir les performances malgré l'usage intensif de JSON :
+
+Colonnes Virtuelles (Generated Columns) :
+Pour le modèle ApprovalRule, une colonne virtuelle criteria_min_amount sera créée en base de données pour indexer les seuils de montants fréquemment filtrés.
+SQL (PostgreSQL) : ADD COLUMN criteria_min_amount NUMERIC GENERATED ALWAYS AS (criteria->>'min_amount') STORED;
+Index GIN :
+Un index GIN sera appliqué sur le champ criteria de ApprovalRule et data de Request pour permettre des recherches rapides par clés imbriquées (ex: "Trouver toutes les demandes où department_id = 10").
+Partitionnement :
+La table ApprovalLog sera partitionnée par année (timestamp) pour maintenir des performances de lecture élevées sur l'historique croissant. 
+
+PostgreSQL GIN index JSONB performance best practices
+
+Tout afficher
+Ce dictionnaire servira de référence absolue pour le développement des modèles Django (models.py) et la configuration des validateurs JSON.
+
+
+4. Gouvernance des Évolutions du Schéma (Schema Evolution)
+Puisque le système repose sur du JSON dynamique, il faut définir comment gérer les changements de structure sans casser l'historique.
+
+Politique de Versioning des Schémas :
+Chaque modification du form_schema dans RequestType doit incrémenter un champ schema_version (Integer).
+Les nouvelles demandes utilisent la version N, les anciennes restent en version N-1. Le code doit être capable de lire les deux versions (rétrocompatibilité).
+Procédure de Dépréciation :
+Règle stricte : Un champ JSON ne peut jamais être supprimé brutalement. Il doit d'abord être marqué deprecated: true dans le schéma pendant 6 mois avant suppression logique.
+Scripts de "Backfill" :
+Protocole défini pour mettre à jour les données existantes si une règle métier change radicalement (ex: transformer un champ texte "montant" en décimal).
+
+Django JSONField schema versioning and migration strategies
+
+Tout afficher
+5. Matrice de Sécurité et de Confidentialité (Data Security & Privacy)
+Définit qui peut voir ou modifier chaque champ, crucial pour les données financières et RH.
+
+Modèle	Champ	Niveau de Confidentialité	Rôles Autorisés (Lecture)	Rôles Autorisés (Écriture)	Chiffrement
+Request	data (contenu)	Confidentiel	Demandeur, Approbateurs actuels, Admin Système	Demandeur (brouillon), Système	Oui (au repos)
+Request	snapshot_metadata	Interne	Tous les utilisateurs connectés	Système (seulement)	Non
+ApprovalRule	criteria	Interne	Admin Fonctionnel, Développeurs	Admin Fonctionnel	Non
+ApprovalRule	approvers_config	Restreint	Admin Fonctionnel, RH	Admin Fonctionnel	Non
+Delegation	delegate	Interne	Demandeur, Admin, Délégant	Délégant, Admin	Non
+ApprovalLog	context (IP, détails)	Restreint	Audit, Super Admin, DSI	Système (seulement)	Oui
+
+Masquage Dynamique : Spécification que le champ data doit être partiellement masqué (ex: masquer le motif médical dans une demande de congé) pour les approbateurs non-RH, géré via des vues Django spécifiques.
+
+Django row level security and field encryption best practices
+
+Tout afficher
+6. Stratégie de Migration et Intégrité des Données
+Comment passer de l'ancien système (ou d'une version vide) à ce nouveau modèle complexe.
+
+Règles de Transformation (ETL) :
+Mapping précis des anciennes tables relationnelles vers les nouveaux champs JSON.
+Exemple : Ancienne colonne amount -> Nouvelle structure data->{'montant': value}.
+Validation Post-Migration :
+Scripts de contrôle obligatoires pour vérifier que 100% des enregistrements migrés valident le nouveau JSONSchema.
+Gestion des "orphelins" : Que faire des demandes en cours dont l'approbateur n'existe plus ? (Règle : Assignation automatique au manager du département + notification Admin).
+Plan de Rollback :
+Procédure pour revenir à l'état antérieur en cas d'échec critique de la migration des schémas JSON.
+
+Data migration strategy for relational to JSON NoSQL hybrid Django
+
+Tout afficher
+7. Glossaire Métier et Technique
+Pour éviter les ambiguïtés entre les développeurs et les administrateurs fonctionnels.
+
+Définitions Clés :
+Critère : Condition logique (ex: > 1000) définie dans ApprovalRule.criteria.
+Règle : L'ensemble complet (Critère + Approbateur + Niveau).
+Délégation : Transfert temporaire de droit, distinct d'un remplacement permanent.
+Snapshot : Photo figée de l'organisation au moment de la demande, utilisée pour le routage même si l'organigramme change ensuite.
+
+Matrice de Sécurité et de Confidentialité (Détail)
+Cette matrice s'applique au niveau de l'application (via les Permissions et ObjectPermissions de Django) et, pour les données sensibles, au niveau de la base de données.
+
+5.1. Définition des Rôles (RBAC)
+Demandeur : Utilisateur soumettant une demande.
+Approbateur : Utilisateur désigné pour valider une demande (peut être aussi un demandeur).
+Admin Fonctionnel : Gestionnaire métier configurant les règles (non-développeur).
+Auditeur : Lecture seule sur l'historique et les logs (Compliance/RH).
+Super Admin : Administration technique du système (DSI).
+5.2. Matrice d'Accès par Modèle et Champ
+Modèle	Champ / Données	Confidentialité	Lecture (Qui ?)	Écriture (Qui ?)	Masquage / Chiffrement
+RequestType	name, code, is_active	Public	Tous	Admin Fonctionnel	Aucun
+form_schema	Interne	Tous (pour affichage)	Admin Fonctionnel	Aucun
+Request	id, status, submitted_at	Interne	Demandeur, Approbateurs, Admin	Système, Demandeur (brouillon)	Aucun
+requester	Interne	Approbateurs, Admin, RH	Système	Aucun
+data (Contenu)	Confidentiel	Demandeur, Approbateurs actuels, RH (si sensible)	Demandeur (brouillon), Système	Chiffrement au repos (AES-256) si type = "Médical/Salaire". Masquage partiel pour approbateurs non-RH.
+snapshot_metadata	Interne	Admin, Approbateurs	Système (seulement)	Aucun
+ApprovalRule	level, is_active	Interne	Admin Fonctionnel, Auditeurs	Admin Fonctionnel	Aucun
+criteria	Restreint	Admin Fonctionnel, Super Admin	Admin Fonctionnel	Aucun
+approvers_config	Strictement Restreint	Super Admin, RH Director	Admin Fonctionnel (avec validation)	Journalisation obligatoire de toute modification dans ApprovalLog.
+Delegation	delegator, delegate	Interne	Demandeur (pour info), Admin	Délégant, Admin	Aucun
+start_date, end_date	Interne	Tous	Délégant, Admin	Aucun
+scope	Interne	Admin, Délégant	Délégant, Admin	Aucun
+ApprovalLog	action_type, timestamp, comment	Interne	Demandeur (ses demandes), Approbateurs, Admin	Système (seulement)	Aucun
+actor	Interne	Admin, Auditeurs	Système	Aucun
+context (IP, détails tech)	Strictement Restreint	Super Admin, Auditeurs, DSI	Système	Chiffrement au repos. Accessible uniquement via interface d'audit sécurisée (2FA requis).
+
+5.3. Règles de Sécurité Spécifiques (Implémentation Django)
+Chiffrement des Données Sensibles (data) :
+Utiliser la bibliothèque cryptography ou django-cryptography-fields.
+Le champ data doit être chiffré en base de données si le RequestType est marqué is_sensitive = True (ex: Congés maladie, Primes).
+La clé de déchiffrement est gérée par le serveur d'application, jamais stockée dans le code source (utiliser des variables d'environnement ou un vault comme HashiCorp Vault).
+Masquage Dynamique (Row-Level Security) :
+Implémenter une logique dans les ModelManagers ou les Serializers pour filtrer les champs sensibles.
+Exemple : Si l'approbateur n'est pas dans le groupe "RH", le champ data.motif d'une demande de type "Congé Médical" est renvoyé comme "*** Masqué par confidentialité ***".
+Traçabilité des Accès Priviliégiés :
+Toute lecture du champ ApprovalRule.approvers_config ou ApprovalLog.context par un humain (Super Admin/Auditeur) doit générer une entrée dans un journal d'audit secondaire ("Qui a consulté la configuration des approbateurs ?").
+Protection contre l'Injection JSON :
+Valider strictement tous les contenus JSON entrants via jsonschema avant insertion en base pour éviter les attaques par injection de structures malveillantes.
+
+Django field level encryption and row level security best practices 2026
+
+Tout afficher
+Cette matrice garantit que la flexibilité du JSON ne se fait pas au détriment de la sécurité, en appliquant le principe du moindre privilège à chaque niveau de donnée.

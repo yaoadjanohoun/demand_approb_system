@@ -1,0 +1,85 @@
+1. Dans les Spécifications Techniques (TSD)
+C'est le document d'architecture. Il dicte comment le système doit être construit pour s'adapter à l'environnement.
+
+Ajoutez une section "Contraintes d'Infrastructure et d'Environnement" avec les points suivants :
+
+Écosystème Microsoft Natif :
+Authentification : Le système doit utiliser Active Directory (AD) via le protocole LDAP ou Kerberos (SSO) pour l'authentification unique. Aucun mot de passe interne ne doit être stocké.
+Base de Données : Utilisation de Microsoft SQL Server (au lieu de PostgreSQL par défaut) avec le connecteur mssql-django. Si PostgreSQL est maintenu, il doit être hébergé sur une VM Windows Server gérée par l'équipe infrastructure.
+Hébergement : Déploiement obligatoire sur IIS (Internet Information Services) via le module wfastcgi ou dans un conteneur Docker Windows orchestré par l'infrastructure existante.
+Notifications : Utilisation exclusive de Microsoft Exchange (SMTP) pour l'envoi des emails d'approbation.
+Reporting : Export des données nativement compatibles avec Power BI (format .pbix ou connexion directe ODBC).
+Contrainte "Zéro Droit Admin Local" :
+Architecture Portable : L'application Django doit être packagée pour s'exécuter dans un environnement utilisateur restreint (ex: Virtualenv isolé dans le dossier utilisateur ou conteneurisation).
+Installation Silencieuse : Le déploiement des dépendances (Python, bibliothèques) doit être géré centralement par les outils de gestion de parc Microsoft (ex: SCCM ou Intune) ou via un script d'initialisation ne nécessitant pas d'élévation de privilèges (UAC).
+Stockage des Logs/Config : Les fichiers de logs et de configuration locale doivent pointer vers des répertoires utilisateur (%APPDATA%) et non vers C:\Program Files.
+
+Django deployment on Windows Server IIS without admin rights
+
+Tout afficher
+2. Dans le Plan de Déploiement et de Migration
+C'est le document opérationnel. Il explique comment installer et maintenir le système au quotidien.
+
+Ajoutez une section "Procédures d'Installation en Environnement Restreint" :
+
+Prérequis Utilisateur : Liste explicite indiquant que l'installation ne nécessite aucun droit administrateur.
+Rôle de l'Infrastructure (DSI) : Définit clairement que c'est l'équipe Infrastructure qui doit :
+Ouvrir les flux firewall pour le SQL Server et l'AD.
+Créer le compte de service pour l'application dans l'Active Directory.
+Pousser le paquet d'installation (ex: .msi ou script PowerShell) via SCCM/Intune.
+Mode Opératoire Utilisateur : Guide étape par étape pour lancer l'application depuis le menu Démarrer ou un raccourci bureau, sans aucune configuration manuelle.
+Gestion des Mises à Jour : Procédure où la DSI pousse les nouvelles versions de manière centralisée, l'utilisateur n'ayant jamais à lancer de commande pip install ou migrate manuellement.
+
+
+1. Ajout aux Spécifications Techniques (TSD)
+Insérez cette section dans le chapitre "Architecture Système" ou "Environnement Technique".
+
+Section : Contraintes d'Infrastructure et d'Environnement
+1.1. Écosystème Microsoft Natif Le système doit s'intégrer nativement à l'infrastructure existante sans composants tiers superflus :
+
+Authentification : Utilisation exclusive d'Active Directory (AD) via le protocole LDAP ou Kerberos (SSO).  Aucun mot de passe interne n'est stocké dans la base de données Django. La validation des identités se fait via le compte de service AD de l'application.
+Base de Données : Utilisation de Microsoft SQL Server avec le connecteur officiel mssql-django.
+Configuration : Le moteur doit supporter les JSONField via des colonnes calculées persistantes pour l'indexation.
+Alternative : Si PostgreSQL est maintenu, il doit être hébergé sur une VM Windows Server gérée par l'équipe infrastructure, accessible uniquement via le réseau interne.
+Hébergement : Déploiement obligatoire sur IIS (Internet Information Services).
+Module : Utilisation du module HttpPlatformHandler (recommandé par Microsoft pour Python) ou wfastcgi pour l'intégration.
+Conteneurisation : Optionnellement, déploiement dans un conteneur Docker Windows orchestré par l'infrastructure existante si la politique de sécurité l'exige.
+Notifications : Utilisation exclusive de Microsoft Exchange (SMTP) pour l'envoi des emails. Le système utilisera un compte de service dédié avec enregistrement SPF/DKIM validé.
+Reporting : Les vues de données et procédures stockées doivent être nativement compatibles avec Power BI (connexion directe ODBC ou export de vues certifiées). 
+1.2. Contrainte "Zéro Droit Admin Local" L'application doit fonctionner dans un environnement utilisateur restreint (Least Privilege) :
+
+Architecture Portable : L'application Django doit être packagée pour s'exécuter dans un environnement isolé (ex: Virtualenv contenu dans le dossier d'installation de l'application ou conteneur). Aucun paquet Python ne doit être installé globalement dans le registre ou C:\Python.
+Installation Silencieuse : Le déploiement des dépendances (Python, bibliothèques WHL) doit être géré centralement par les outils de gestion de parc (SCCM ou Intune) ou via un script d'initialisation ne nécessitant pas d'élévation de privilèges (UAC).
+Stockage des Logs/Config : Conformité stricte avec les standards Windows :
+Les fichiers de logs (stderr, stdout, logs applicatifs) doivent pointer vers %APPDATA%\NomApp\Logs.
+La configuration locale (settings_local.py, secrets) doit résider dans %APPDATA%\NomApp\Config.
+Aucun écriture ne doit être tentée dans C:\Program Files ou C:\inetpub par le processus applicatif
+
+2. Ajout au Plan de Déploiement et de Migration
+Insérez cette section dans le chapitre "Procédures Opérationnelles".
+
+Section : Procédures d'Installation en Environnement Restreint
+2.1. Prérequis Utilisateur
+
+Droits Requis : Aucun droit d'administrateur local n'est requis sur le poste de travail ou le serveur d'application pour l'exécution. 
+Accès Réseau : Le poste doit avoir accès aux ports suivants (sortant) :
+TCP 1433 (SQL Server)
+TCP 389/636 (LDAP/LDAPS pour AD)
+TCP 25/587 (SMTP Exchange) 
+2.2. Rôle de l'Infrastructure (DSI) L'équipe Infrastructure est seule habilitée à réaliser les actions suivantes :
+
+Ouverture des Flux : Configuration des règles de firewall pour autoriser le serveur d'hébergement à dialoguer avec le contrôleur de domaine et le SQL Server.
+Compte de Service : Création et gestion du compte de service AD (svc_django_approbation) utilisé par le Pool d'Applications IIS. Ce compte doit avoir les droits db_datareader et db_datawriter sur la base de données.
+Déploiement Centralisé : Poussée du paquet d'installation (ex: .msi ou script PowerShell encapsulé) via SCCM ou Intune.
+Note Technique : Le déploiement doit se faire en Contexte Système pour l'installation des binaires, mais l'application doit ensuite s'exécuter en contexte utilisateur restreint. 
+Configuration IIS : Création du site, du Pool d'Applications (identité = Compte de Service) et déverrouillage des sections system.webServer/handlers pour autoriser HttpPlatformHandler. 
+2.3. Mode Opératoire Utilisateur L'utilisateur final (ou l'admin fonctionnel) ne réalise aucune configuration technique :
+
+Lancement : L'application se lance via un raccourci dans le Menu Démarrer (pointant vers l'URL locale IIS ou l'exécutable wrapper).
+Authentification : La connexion est automatique (SSO Windows) ou demande les identifiants AD (sans création de compte).
+Vérification : L'utilisateur accède immédiatement au tableau de bord. Aucun message de configuration de base de données ou d'erreur de permission ne doit apparaître. 
+2.4. Gestion des Mises à Jour Le cycle de mise à jour est entièrement piloté par la DSI pour garantir l'intégrité :
+
+Distribution : La nouvelle version (code Python, static files) est poussée via SCCM/Intune. 
+Migration : Les commandes de migration Django (python manage.py migrate) sont exécutées automatiquement par un script de déploiement tournant avec les droits du compte de service, avant le basculement du trafic. 
+Interdiction Utilisateur : L'utilisateur n'a jamais à lancer de commande pip install, manage.py ou à modifier des fichiers de configuration manuellement.  Toute tentative de modification locale est écrasée à la prochaine mise à jour centralisée.

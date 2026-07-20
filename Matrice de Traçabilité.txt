@@ -1,0 +1,39 @@
+Matrice de Traçabilité — Système de Demandes et d'Approbation
+1. Méthodologie de Traçage
+Chaque exigence du PRD reçoit un identifiant unique (ex: REQ-FUNC-01). Cette matrice assure le lien bidirectionnel :
+
+Forward Traceability : De l'exigence vers la conception (Modèles Django, Règles JSON) et les tests.
+Backward Traceability : Du code/test vers l'exigence métier (pour éviter le "gold plating" ou fonctionnalités inutiles).
+2. Matrice Détaillée de Traçabilité
+ID Exigence	Catégorie	Description de l'Exigence (PRD)	Conception Technique (Dictionnaire/Modèles)	Règles de Gestion (JSON/Logique)	Cas de Test Associé (Recette)	Statut
+REQ-FUNC-01	Soumission	Le système doit permettre de soumettre une demande avec des champs dynamiques.	Modèle Request (Champ data JSONField). Modèle RequestType (Champ form_schema).	Validation du JSON data contre le schéma form_schema au save().	TEST-01 : Soumettre une demande "Congés" avec champs valides et invalides.	✅ Validé
+REQ-FUNC-02	Routage	Acheminement automatique selon le département et le montant.	Modèle ApprovalRule (Champs criteria JSON, level).	Filtre : criteria.department_id == request.snapshot.department AND criteria.min_amount <= request.data.montant.	TEST-02 : Soumettre 1500€ (IT) → Vérifier routage vers Directeur IT.	✅ Validé
+REQ-FUNC-03	Flexibilité	Modifier un approbateur sans code en quelques clics.	Interface Admin Customisée sur ApprovalRule. Champ approvers_config.	Mise à jour directe en BDD. Pas de redéploiement code. Snapshot fige les IDs existants.	TEST-03 : Changer l'approbateur de la règle R1 → Soumettre nouvelle demande → Vérifier nouveau destinataire.	✅ Validé
+REQ-FUNC-04	Délégation	Définir un remplaçant temporaire (vacances).	Modèle Delegation (Champs start_date, end_date, delegate).	Si date_actuelle dans [start, end] ET approbateur_cible == delegator → Router vers delegate.	TEST-04 : Créer délégation future → Soumettre demande pendant période → Vérifier réception par remplaçant.	✅ Validé
+REQ-FUNC-05	Multi-Approbation	Assigner plusieurs approbateurs à un même niveau.	Champ approvers_config (Type: "Group" ou Liste d'IDs).	Logique "ET" (tous doivent valider) ou "OU" (le premier valide) configurable.	TEST-05 : Configurer 2 approbateurs Niveau 1 → Valider avec l'un → Vérifier passage au Niveau 2.	✅ Validé
+REQ-FUNC-06	Historique	Conserver un historique inaltérable des changements.	Modèle ApprovalLog (Champs actor, action_type, context, timestamp).	Signal post_save sur Request et ApprovalRule pour écrire dans ApprovalLog.	TEST-06 : Modifier une règle → Vérifier entrée dans ApprovalLog avec anciennes/nouvelles valeurs.	✅ Validé
+REQ-FUNC-07	Statuts	Suivi complet (Brouillon, En attente, Approuvé, Refusé, Retour).	Modèle Request (Champ status avec choix stricts). Utilisation de django-fsm.	Transitions autorisées uniquement via le moteur d'état (ex: Pas de Pending → Approuvé direct).	TEST-07 : Tenter transition illégale → Vérifier rejet. Tester cycle complet.	✅ Validé
+REQ-TECH-01	Sécurité	Authentification via Active Directory (SSO).	Backend Auth Django : django-auth-ldap.	Liaison avec le contrôleur de domaine Microsoft. Pas de mot de passe local.	TEST-SEC-01 : Login avec compte AD valide/invalide.	✅ Validé
+REQ-TECH-02	Perf	Temps de réponse < 2s pour 100k demandes.	Indexation GIN sur champs JSON criteria et data. Colonnes virtuelles pour les seuils.	Requêtes optimisées PostgreSQL/SQL Server.	TEST-PERF-01 : Jmeter : 100k lignes, requête de routage < 2s.	⏳ En cours
+REQ-TECH-03	Infra	Installation sans droits administrateur local.	Packaging : Virtualenv portable ou Conteneur Docker Windows.	Scripts d'init pointant vers %APPDATA%. Déploiement via SCCM.	TEST-INFRA-01 : Installation sur poste utilisateur standard (compte non-admin).	⏳ En cours
+REQ-REP-01	Rapports	Export des données pour analyse externe.	Vues Django + django-import-export. Formats CSV/Excel.	Filtrage des données sensibles avant export selon le rôle.	TEST-REP-01 : Exporter l'historique complet → Ouvrir dans Excel/Power BI.	✅ Validé
+
+
+Requirements Traceability Matrix template for Agile Django projects
+
+Tout afficher
+3. Gestion des Évolutions (Change Management)
+Cette matrice est un document vivant. Toute modification du périmètre doit suivre ce processus :
+
+Nouvelle Exigence : Création d'un nouvel ID (ex: REQ-FUNC-08).
+Impact Analyse : Identification des modèles Django et des règles JSON impactés.
+Mise à Jour Conception : Modification du Dictionnaire de Données si nécessaire (nouveau champ, nouvelle table).
+Création de Test : Rédaction du cas de test correspondant avant le développement (TDD).
+Validation : Le statut passe à "✅ Validé" uniquement après la réussite du test de recette.
+4. Indicateurs de Couverture
+Pour garantir la conformité totale avant la mise en production :
+
+Couverture Fonctionnelle : 100% des exigences REQ-FUNC doivent avoir un cas de test associé et validé.
+Couverture Technique : 100% des exigences REQ-TECH critiques (Sécurité, Infra) doivent être validées.
+Zéro Orphelin : Aucun cas de test ne doit exister sans une exigence métier associée (évite le développement de fonctionnalités inutiles).
+Cette matrice sera le document de référence lors de la Recette Utilisateur (UAT) et de l'audit de conformité final. Elle prouve que le système livré correspond exactement au besoin exprimé.
