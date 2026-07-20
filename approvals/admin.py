@@ -12,6 +12,7 @@ from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
 from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
+from .widgets import CriteriaBuilderWidget, FormSchemaBuilderWidget
 
 STATUS_LABELS = {
     "Brouillon": "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100",
@@ -30,6 +31,23 @@ class JSONWidgetMixin:
     }
 
 
+class NamedFieldWidgetMixin:
+    """Comme JSONWidgetMixin, mais permet d'attribuer un widget différent à
+    des champs JSON précis (ex: constructeur visuel pour form_schema/criteria,
+    éditeur JSON générique pour les autres). À définir sur la sous-classe :
+    field_widgets = {"nom_du_champ": MaWidgetClass}.
+    """
+
+    field_widgets = {}
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name in self.field_widgets:
+            kwargs["widget"] = self.field_widgets[db_field.name]
+        elif isinstance(db_field, models.JSONField):
+            kwargs["widget"] = JSONEditorWidget
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+
 #création du profil admin
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
@@ -38,20 +56,21 @@ class UserProfileAdmin(ModelAdmin):
     autocomplete_fields = ("user", "manager")
 
 
-class ApprovalRuleInline(admin.TabularInline):
+class ApprovalRuleInline(NamedFieldWidgetMixin, admin.TabularInline):
     model = ApprovalRule
     # extra=1 : la ligne est pré-rendue au chargement de la page, ce qui est nécessaire
-    # pour que l'éditeur JSON s'initialise (django-json-widget ne s'active pas sur les
-    # lignes ajoutées dynamiquement via "Add another" dans un inline). Pour ajouter
-    # d'autres règles au même type, utiliser la page "Règles d'approbation".
+    # pour que les widgets s'initialisent (le constructeur visuel comme l'éditeur JSON ne
+    # s'activent pas sur les lignes ajoutées dynamiquement via "Add another" dans un inline).
+    # Pour ajouter d'autres règles au même type, utiliser la page "Règles d'approbation".
     extra = 1
     fields = ("level", "is_active", "criteria", "approvers_config", "created_by")
-    formfield_overrides = {models.JSONField: {"widget": JSONEditorWidget}}
+    field_widgets = {"criteria": CriteriaBuilderWidget}
 
 
 #creation du modele de requete d'approbation d'un type admin
 @admin.register(RequestType)
-class RequestTypeAdmin(JSONWidgetMixin, ModelAdmin):
+class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
+    field_widgets = {"form_schema": FormSchemaBuilderWidget}
     list_display = ("name", "code", "is_active", "schema_version", "resume_on_resubmit", "is_sensitive")
     list_filter = ("is_active", "is_sensitive")
     search_fields = ("name", "code")
@@ -63,8 +82,8 @@ class RequestTypeAdmin(JSONWidgetMixin, ModelAdmin):
             {
                 "fields": ("form_schema", "schema_version"),
                 "description": (
-                    "Définit les champs proposés au demandeur. "
-                    'Ex: {"fields": [{"name": "montant", "type": "decimal", "label": "Montant", "required": true}]}'
+                    "Ajoutez les champs proposés au demandeur (nom technique, label, type, obligatoire). "
+                    "Le nom technique n'accepte que des minuscules et underscores (ex: date_debut)."
                 ),
             },
         ),
@@ -87,7 +106,8 @@ class RequestTypeAdmin(JSONWidgetMixin, ModelAdmin):
 
 # creation de modèle des règles d'approbation d'un compte admin
 @admin.register(ApprovalRule)
-class ApprovalRuleAdmin(JSONWidgetMixin, ModelAdmin):
+class ApprovalRuleAdmin(NamedFieldWidgetMixin, ModelAdmin):
+    field_widgets = {"criteria": CriteriaBuilderWidget}
     list_display = ("request_type", "level", "is_active", "created_by", "updated_at")
     list_filter = ("request_type", "is_active", "level")
     autocomplete_fields = ("created_by",)
@@ -97,7 +117,7 @@ class ApprovalRuleAdmin(JSONWidgetMixin, ModelAdmin):
             "Conditions de déclenchement (criteria)",
             {
                 "fields": ("criteria",),
-                "description": 'Ex: {"min_amount": 1000, "department_ids": [10, 12]}. Vide = règle par défaut, toujours applicable.',
+                "description": "Ajoutez une ou plusieurs conditions (toutes doivent être vraies). Aucune condition = règle par défaut, toujours applicable.",
             },
         ),
         (
@@ -120,7 +140,7 @@ class ApprovalRuleAdmin(JSONWidgetMixin, ModelAdmin):
 
 
 class InterventionForm(BaseDialogForm):
-    """Formulaire du bouton "Intervenir" (cf. Manuel d'Administration §6.1 :
+    """Formulaire du bouton "Intervenir" (
     demande bloquée, ex. approbateur parti sans délégation)."""
 
     ACTION_CHOICES = [
@@ -151,7 +171,7 @@ class InterventionForm(BaseDialogForm):
         return cleaned
 
 
-#cration de modeme des requetes d'admin
+#creation de modeme des requetes d'admin
 @admin.register(Request)
 class RequestAdmin(JSONWidgetMixin, ModelAdmin):
     list_display = ("id", "request_type", "requester", "status_display", "current_level", "submitted_at")
