@@ -1,0 +1,23 @@
+{% extends "approvals/base.html" %}
+{% block title %}À approuver{% endblock %}
+{% block content %}
+<h1>Demandes à approuver</h1>
+<div class="card">
+    {% if requests %}
+        <table>
+            <tr><th>Type</th><th>Demandeur</th><th>Niveau</th><th>Soumise le</th><th></th></tr>
+            {% for req in requests %}
+                <tr>
+                    <td>{{ req.request_type.name }}</td>
+                    <td>{{ req.requester.username }}</td>
+                    <td>{{ req.current_level }}</td>
+                    <td>{{ req.submitted_at }}</td>
+                    <td><a href="{% url 'approvals:request_detail' req.pk %}">Traiter</a></td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>Aucune demande en attente de ton approbation.</p>
+    {% endif %}
+</div>
+{% endblock %}

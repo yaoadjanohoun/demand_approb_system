@@ -1,0 +1,66 @@
+{% extends "approvals/base.html" %}
+{% block title %}Demande {{ req.request_type.name }}{% endblock %}
+{% block content %}
+<h1>{{ req.request_type.name }}</h1>
+
+<div class="card">
+    <p>
+        Statut : <span class="status status-{{ req.status }}">{{ req.get_status_display }}</span>
+        — Niveau {{ req.current_level }}
+    </p>
+    <p>Demandeur : {{ req.requester.username }}</p>
+    <p>Soumise le : {{ req.submitted_at|default:"—" }}</p>
+
+    <h3>Détails</h3>
+    <table>
+        {% for key, value in req.data.items %}
+            <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+        {% endfor %}
+    </table>
+
+    {% if is_requester and req.status == "RETURNED" %}
+        <p><a class="btn btn-primary" href="{% url 'approvals:request_edit' req.pk %}">Corriger et resoumettre</a></p>
+    {% endif %}
+
+    {% if is_current_approver %}
+        <h3>Décision</h3>
+        <label>Commentaire (obligatoire pour refuser ou retourner)</label>
+        <textarea id="comment-text" rows="2"></textarea>
+
+        <p>
+            <form method="post" action="{% url 'approvals:request_approve' req.pk %}" style="display:inline;" onsubmit="document.getElementById('approve-comment').value = document.getElementById('comment-text').value;">
+                {% csrf_token %}
+                <input type="hidden" name="comment" id="approve-comment">
+                <button type="submit" class="btn btn-approve">Approuver</button>
+            </form>
+
+            <form method="post" action="{% url 'approvals:request_return' req.pk %}" style="display:inline;" onsubmit="document.getElementById('return-comment').value = document.getElementById('comment-text').value; return document.getElementById('comment-text').value.trim() !== '';">
+                {% csrf_token %}
+                <input type="hidden" name="comment" id="return-comment">
+                <button type="submit" class="btn btn-return">Retourner pour info</button>
+            </form>
+
+            <form method="post" action="{% url 'approvals:request_reject' req.pk %}" style="display:inline;" onsubmit="document.getElementById('reject-comment').value = document.getElementById('comment-text').value; return document.getElementById('comment-text').value.trim() !== '';">
+                {% csrf_token %}
+                <input type="hidden" name="comment" id="reject-comment">
+                <button type="submit" class="btn btn-reject">Refuser</button>
+            </form>
+        </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Historique</h3>
+    <table>
+        <tr><th>Date</th><th>Acteur</th><th>Action</th><th>Commentaire</th></tr>
+        {% for log in logs %}
+            <tr>
+                <td>{{ log.timestamp }}</td>
+                <td>{{ log.actor.username|default:"Système" }}</td>
+                <td>{{ log.get_action_type_display }}</td>
+                <td>{{ log.comment|default:"—" }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "approvals/base.html" %}
+{% block title %}{{ request_type.name }}{% endblock %}
+{% block content %}
+<h1>{% if editing %}Corriger et resoumettre{% else %}Nouvelle demande{% endif %} — {{ request_type.name }}</h1>
+<div class="card">
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn btn-primary">{% if editing %}Resoumettre{% else %}Soumettre{% endif %}</button>
+    </form>
+</div>
+{% endblock %}

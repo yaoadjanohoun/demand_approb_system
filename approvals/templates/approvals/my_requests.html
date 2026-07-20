@@ -1,0 +1,23 @@
+{% extends "approvals/base.html" %}
+{% block title %}Mes demandes{% endblock %}
+{% block content %}
+<h1>Mes demandes</h1>
+<div class="card">
+    {% if requests %}
+        <table>
+            <tr><th>Type</th><th>Statut</th><th>Niveau</th><th>Soumise le</th><th></th></tr>
+            {% for req in requests %}
+                <tr>
+                    <td>{{ req.request_type.name }}</td>
+                    <td><span class="status status-{{ req.status }}">{{ req.get_status_display }}</span></td>
+                    <td>{{ req.current_level }}</td>
+                    <td>{{ req.submitted_at|default:"—" }}</td>
+                    <td><a href="{% url 'approvals:request_detail' req.pk %}">Voir</a></td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>Tu n'as encore soumis aucune demande.</p>
+    {% endif %}
+</div>
+{% endblock %}

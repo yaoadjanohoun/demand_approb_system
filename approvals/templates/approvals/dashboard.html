@@ -1,0 +1,21 @@
+{% extends "approvals/base.html" %}
+{% block title %}Accueil{% endblock %}
+{% block content %}
+<h1>Nouvelle demande</h1>
+<div class="card">
+    {% if request_types %}
+        <table>
+            {% for rt in request_types %}
+                <tr>
+                    <td>{{ rt.name }}</td>
+                    <td style="text-align:right;">
+                        <a class="btn btn-primary" href="{% url 'approvals:request_create' rt.id %}">Soumettre</a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>Aucun type de demande actif pour le moment. Un administrateur fonctionnel doit en créer un.</p>
+    {% endif %}
+</div>
+{% endblock %}

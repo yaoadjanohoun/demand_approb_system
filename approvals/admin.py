@@ -3,12 +3,14 @@ from django.contrib import admin
 from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
 
 
+#création du profil admin
 @admin.register(UserProfile)
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "manager", "department_id", "site_id", "country_code")
     search_fields = ("user__username",)
 
 
+#creation du modele de requete d'approbation d'un type admin
 @admin.register(RequestType)
 class RequestTypeAdmin(admin.ModelAdmin):
     list_display = ("name", "code", "is_active", "schema_version", "resume_on_resubmit")
@@ -16,12 +18,14 @@ class RequestTypeAdmin(admin.ModelAdmin):
     search_fields = ("name", "code")
 
 
+# creation de modèle des règles d'approbation d'un compte admin
 @admin.register(ApprovalRule)
 class ApprovalRuleAdmin(admin.ModelAdmin):
     list_display = ("request_type", "level", "is_active", "created_by", "updated_at")
     list_filter = ("request_type", "is_active", "level")
 
 
+#cration de modeme des requetes d'admin
 @admin.register(Request)
 class RequestAdmin(admin.ModelAdmin):
     list_display = ("id", "request_type", "requester", "status", "current_level", "submitted_at")
@@ -29,12 +33,15 @@ class RequestAdmin(admin.ModelAdmin):
     search_fields = ("id", "requester__username")
 
 
+#creation de modèle de création de délégation par un admin.
 @admin.register(Delegation)
 class DelegationAdmin(admin.ModelAdmin):
     list_display = ("delegator", "delegate", "start_date", "end_date", "is_active")
     list_filter = ("start_date", "end_date")
 
 
+
+#cration de modele pour consulter les logs d'approbation admin
 @admin.register(ApprovalLog)
 class ApprovalLogAdmin(admin.ModelAdmin):
     list_display = ("timestamp", "request", "actor", "action_type", "previous_status", "new_status")
@@ -49,3 +56,5 @@ class ApprovalLogAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
