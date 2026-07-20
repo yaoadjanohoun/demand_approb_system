@@ -78,13 +78,46 @@ WSGI_APPLICATION = 'demand_approb_system_main.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
+#
+# SQL Server en production (Les Spécifications Techniques §1.1 : "Utilisation
+# de Microsoft SQL Server avec le connecteur officiel mssql-django"), SQLite en
+# développement local — bascule via la variable d'environnement SQLSERVER_HOST,
+# même principe que AUTH_LDAP_SERVER_URI pour l'authentification AD.
+# Le mot de passe du compte de service (SQLSERVER_PASSWORD) ne doit jamais être
+# écrit en dur, uniquement fourni via l'environnement (cf. §1.2).
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+SQLSERVER_HOST = os.environ.get('SQLSERVER_HOST', '')
+
+if SQLSERVER_HOST:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'mssql',
+            'NAME': os.environ.get('SQLSERVER_NAME', 'demand_approb_system'),
+            'HOST': SQLSERVER_HOST,
+            'PORT': os.environ.get('SQLSERVER_PORT', '1433'),
+            'USER': os.environ.get('SQLSERVER_USER', ''),
+            'PASSWORD': os.environ.get('SQLSERVER_PASSWORD', ''),
+            'OPTIONS': {
+                'driver': os.environ.get('SQLSERVER_ODBC_DRIVER', 'ODBC Driver 18 for SQL Server'),
+                # ODBC Driver 18 vérifie le certificat TLS par défaut ; sur un
+                # premier déploiement sans certificat interne encore déployé,
+                # SQLSERVER_TRUST_CERT=true permet de démarrer quand même
+                # (à désactiver dès que le certificat du serveur est en place).
+                'extra_params': (
+                    'TrustServerCertificate=yes;'
+                    if os.environ.get('SQLSERVER_TRUST_CERT', 'true').lower() == 'true'
+                    else ''
+                ),
+            },
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
