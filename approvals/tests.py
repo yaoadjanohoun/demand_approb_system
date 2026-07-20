@@ -3,7 +3,9 @@ import datetime
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from django.utils import timezone
 
+from . import reports as reports_module
 from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
 
@@ -323,3 +325,65 @@ class ConflictAndPriorityTests(TestCase):
             criteria={}, approvers_config={"type": "user", "user_id": self.manager_b.id},
         )
         self.assertTrue(admin_instance.default_rule_display(self.request_type))
+
+
+class ReportsTests(TestCase):
+    """Rapports et statistiques (Manuel d'Administration §6.2)."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=self.employee, department_id=10)
+        self.request_type = RequestType.objects.create(
+            name="Note de frais", code="EXPENSE",
+            form_schema={"fields": [{"name": "montant", "type": "decimal", "required": True}]},
+        )
+
+    def make_request(self, status, submitted_at, completed_at=None):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, data={"montant": 100},
+            status=status, submitted_at=submitted_at, completed_at=completed_at,
+        )
+        return req
+
+    def test_volume_by_month_counts_submitted_requests_only(self):
+        now = timezone.now()
+        self.make_request(Request.Status.APPROVED, now, now)
+        self.make_request(Request.Status.PENDING, now)
+        Request.objects.create(  # brouillon, jamais soumis : ne doit pas être compté
+            request_type=self.request_type, requester=self.employee, data={},
+        )
+        volume = reports_module.volume_by_month()
+        self.assertEqual(len(volume), 1)
+        self.assertEqual(volume[0]["count"], 2)
+
+    def test_rejection_rate_by_type(self):
+        now = timezone.now()
+        self.make_request(Request.Status.APPROVED, now, now)
+        self.make_request(Request.Status.REJECTED, now, now)
+        self.make_request(Request.Status.REJECTED, now, now)
+        rejection = reports_module.rejection_rate_by_type()
+        self.assertEqual(rejection[0]["name"], "Note de frais")
+        self.assertEqual(rejection[0]["total"], 3)
+        self.assertEqual(rejection[0]["rejected"], 2)
+        self.assertAlmostEqual(rejection[0]["rate"], 66.7)
+
+    def test_average_approval_time_by_type_and_department(self):
+        now = timezone.now()
+        self.make_request(Request.Status.APPROVED, now, now + datetime.timedelta(hours=10))
+        self.make_request(Request.Status.APPROVED, now, now + datetime.timedelta(hours=20))
+        by_type = reports_module.average_approval_time_by_type()
+        self.assertEqual(by_type[0]["avg_hours"], 15.0)
+        self.assertEqual(by_type[0]["count"], 2)
+
+        by_department = reports_module.average_approval_time_by_department()
+        self.assertEqual(by_department[0]["department"], 10)
+        self.assertEqual(by_department[0]["avg_hours"], 15.0)
+
+    def test_export_requests_csv_includes_all_requests(self):
+        now = timezone.now()
+        self.make_request(Request.Status.APPROVED, now, now + datetime.timedelta(hours=5))
+        response = reports_module.export_requests_csv()
+        content = response.content.decode("utf-8")
+        self.assertIn("text/csv", response["Content-Type"])
+        self.assertIn("employee1", content)
+        self.assertIn("EXPENSE", content)

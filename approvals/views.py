@@ -1,8 +1,10 @@
 from django.contrib import messages
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 
+from . import reports as reports_module
 from .forms import build_dynamic_form
 from .models import Request, RequestType
 from .services import RoutingError, WorkflowEngine
@@ -175,3 +177,19 @@ def request_return(request, pk):
         except RoutingError as exc:
             messages.error(request, str(exc))
     return redirect("approvals:request_detail", pk=pk)
+
+
+@staff_member_required
+def reports(request):
+    context = {
+        "volume": reports_module.volume_by_month(),
+        "rejection": reports_module.rejection_rate_by_type(),
+        "duration_by_type": reports_module.average_approval_time_by_type(),
+        "duration_by_department": reports_module.average_approval_time_by_department(),
+    }
+    return render(request, "approvals/reports.html", context)
+
+
+@staff_member_required
+def reports_export(request):
+    return reports_module.export_requests_csv()

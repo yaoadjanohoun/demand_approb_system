@@ -173,6 +173,11 @@ UNFOLD = {
                         "icon": "history",
                         "link": reverse_lazy("admin:approvals_approvallog_changelist"),
                     },
+                    {
+                        "title": "Rapports",
+                        "icon": "monitoring",
+                        "link": reverse_lazy("approvals:reports"),
+                    },
                 ],
             },
             {
