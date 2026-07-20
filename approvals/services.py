@@ -224,6 +224,18 @@ class WorkflowEngine:
             return []
         return entry.get("active_approver_ids", entry["approver_ids"])
 
+    def is_or_was_approver(self, user_id):
+        """Vrai si l'utilisateur est (ou a été) approbateur à n'importe quel niveau
+        de cette demande — pas seulement le niveau courant. Sert à autoriser un
+        approbateur à consulter une demande après avoir validé son niveau, même
+        une fois qu'elle est passée au niveau suivant (ou terminée)."""
+        for entry in self.request.snapshot_metadata.get("workflow_snapshot", []):
+            if user_id in entry.get("active_approver_ids", entry.get("approver_ids", [])):
+                return True
+            if user_id in entry.get("approver_ids", []):
+                return True
+        return False
+
     # ------------------------------------------------------------------
     # Décisions
     # ------------------------------------------------------------------

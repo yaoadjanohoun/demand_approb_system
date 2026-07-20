@@ -116,7 +116,7 @@ def pending_approvals(request):
 def _can_view(user, req):
     if req.requester_id == user.id:
         return True
-    return user.id in WorkflowEngine(req).get_effective_approvers()
+    return WorkflowEngine(req).is_or_was_approver(user.id)
 
 
 @login_required
