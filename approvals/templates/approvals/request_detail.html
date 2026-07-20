@@ -13,8 +13,8 @@
 
     <h3>Détails</h3>
     <table>
-        {% for key, value in req.data.items %}
-            <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+        {% for row in data_rows %}
+            <tr><th>{{ row.label }}</th><td>{{ row.value }}</td></tr>
         {% endfor %}
     </table>
 

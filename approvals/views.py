@@ -5,7 +5,7 @@ from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
 
 from . import reports as reports_module
-from .forms import build_dynamic_form
+from .forms import build_dynamic_form, labeled_data
 from .models import Request, RequestType
 from .services import RoutingError, WorkflowEngine
 
@@ -133,6 +133,7 @@ def request_detail(request, pk):
         request, "approvals/request_detail.html",
         {
             "req": req,
+            "data_rows": labeled_data(req.request_type, req.data),
             "logs": req.logs.select_related("actor"),
             "is_current_approver": is_current_approver,
             "is_requester": req.requester_id == request.user.id,

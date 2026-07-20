@@ -101,7 +101,7 @@ class Command(BaseCommand):
                 "name": "Note de frais",
                 "is_active": True,
                 "form_schema": {"fields": [
-                    {"name": "montant", "type": "decimal", "label": "Montant (€)", "required": True},
+                    {"name": "montant", "type": "decimal", "label": "Montant", "required": True},
                     {"name": "motif", "type": "text", "label": "Motif", "required": True},
                     {"name": "date_depense", "type": "date", "label": "Date de la dépense", "required": False},
                 ]},
@@ -139,7 +139,7 @@ class Command(BaseCommand):
                 "name": "Achat Fournisseur IT",
                 "is_active": True,
                 "form_schema": {"fields": [
-                    {"name": "montant", "type": "decimal", "label": "Montant HT (€)", "required": True},
+                    {"name": "montant", "type": "decimal", "label": "Montant HT", "required": True},
                     {"name": "fournisseur", "type": "text", "label": "Fournisseur", "required": True},
                 ]},
             },

@@ -6,7 +6,17 @@
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">Se connecter</button>
+        <label style="display:flex; align-items:center; gap:0.4rem; font-weight:400; margin-top:-0.5rem;">
+            <input type="checkbox" id="toggle-password" style="width:auto; margin:0;">
+            Afficher le mot de passe
+        </label>
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem;">Se connecter</button>
     </form>
 </div>
+<script>
+    document.getElementById('toggle-password').addEventListener('change', function () {
+        var pwd = document.getElementById('id_password');
+        if (pwd) pwd.type = this.checked ? 'text' : 'password';
+    });
+</script>
 {% endblock %}

@@ -154,9 +154,11 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'fr-ca'
 
-TIME_ZONE = 'UTC'
+# Toutes les dates/heures affichées et les échéances (délégations, etc.) sont
+# calculées dans le fuseau horaire du siège (retour client).
+TIME_ZONE = 'America/Toronto'
 
 USE_I18N = True
 

@@ -1,4 +1,6 @@
 """Construction d'un formulaire Django dynamique à partir d'un RequestType.form_schema."""
+import datetime
+
 from django import forms
 
 FIELD_BUILDERS = {
@@ -27,7 +29,42 @@ def build_dynamic_form(request_type, data=None, initial=None):
         field = builder()
         field.required = bool(field_def.get("required", False))
         field.label = field_def.get("label") or field_def["name"].replace("_", " ").capitalize()
+        if field_type == "date":
+            # Pré-rempli avec la date du jour, modifiable par le demandeur (retour client) ;
+            # ignoré automatiquement si un `initial` explicite est fourni pour ce champ
+            # (ex: correction d'une demande retournée, cf. `initial` du Form Django).
+            field.initial = datetime.date.today
         declared_fields[field_def["name"]] = field
 
     form_class = type("DynamicRequestForm", (forms.Form,), declared_fields)
     return form_class(data=data, initial=initial)
+
+
+def labeled_data(request_type, data):
+    """Associe chaque valeur de Request.data à son label configuré dans le
+    form_schema (au lieu du nom technique, ex: "date_debut" -> "Date de début"),
+    dans l'ordre du formulaire. Les clés obsolètes non présentes dans le schéma
+    (champ supprimé depuis) gardent leur nom technique en repli."""
+    field_defs = request_type.form_schema.get("fields", [])
+    labels = {f["name"]: f.get("label") or f["name"].replace("_", " ").capitalize() for f in field_defs}
+
+    rows = []
+    seen = set()
+    for field_def in field_defs:
+        name = field_def["name"]
+        if name not in data:
+            continue
+        rows.append({"label": labels[name], "value": _format_value(data[name])})
+        seen.add(name)
+    for name, value in data.items():
+        if name not in seen:
+            rows.append({"label": labels.get(name, name), "value": _format_value(value)})
+    return rows
+
+
+def _format_value(value):
+    if isinstance(value, bool):
+        return "Oui" if value else "Non"
+    if value is None or value == "":
+        return "—"
+    return value
