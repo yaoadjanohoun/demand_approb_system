@@ -193,6 +193,8 @@ class ApprovalLog(models.Model):
         RETURN = "RETURN", "Retour"
         RULE_CHANGE = "RULE_CHANGE", "Modification de règle"
         DELEGATION_TRIGGERED = "DELEGATION_TRIGGERED", "Délégation déclenchée"
+        FORCE_ADVANCE = "FORCE_ADVANCE", "Passage forcé (intervention admin)"
+        REASSIGN = "REASSIGN", "Réassignation (intervention admin)"
 
     id = models.BigAutoField(primary_key=True)
     request = models.ForeignKey(

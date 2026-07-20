@@ -1,10 +1,17 @@
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
+from django.contrib.auth.models import User
 from django.db import models
+from django.shortcuts import redirect
+from django.urls import reverse
 from django_json_widget.widgets import JSONEditorWidget
 from unfold.admin import ModelAdmin
-from unfold.decorators import display
+from unfold.decorators import action, display
+from unfold.forms import BaseDialogForm
+from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
 from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
+from .services import RoutingError, WorkflowEngine
 
 STATUS_LABELS = {
     "Brouillon": "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100",
@@ -112,6 +119,38 @@ class ApprovalRuleAdmin(JSONWidgetMixin, ModelAdmin):
         super().save_model(request, obj, form, change)
 
 
+class InterventionForm(BaseDialogForm):
+    """Formulaire du bouton "Intervenir" (cf. Manuel d'Administration §6.1 :
+    demande bloquée, ex. approbateur parti sans délégation)."""
+
+    ACTION_CHOICES = [
+        ("force_advance", "Forcer le passage au niveau suivant"),
+        ("reassign", "Réassigner à un autre utilisateur"),
+    ]
+
+    action_type = forms.ChoiceField(
+        choices=ACTION_CHOICES, label="Action", widget=UnfoldAdminSelectWidget
+    )
+    new_approver = forms.ModelChoiceField(
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+        label="Nouvel approbateur (si réassignation)",
+        widget=UnfoldAdminSelectWidget,
+    )
+    comment = forms.CharField(
+        label="Commentaire (obligatoire, journalisé)",
+        widget=UnfoldAdminTextareaWidget,
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("action_type") == "reassign" and not cleaned.get("new_approver"):
+            raise forms.ValidationError(
+                "Sélectionnez un nouvel approbateur pour une réassignation."
+            )
+        return cleaned
+
+
 #cration de modeme des requetes d'admin
 @admin.register(Request)
 class RequestAdmin(JSONWidgetMixin, ModelAdmin):
@@ -120,8 +159,9 @@ class RequestAdmin(JSONWidgetMixin, ModelAdmin):
     search_fields = ("id", "requester__username")
     # Lecture seule : modifier une demande ici contournerait le moteur de routage
     # (pas de recalcul du niveau, pas d'entrée dans ApprovalLog). Les décisions
-    # se prennent depuis l'interface de soumission/approbation.
+    # se prennent depuis l'interface de soumission/approbation ou le bouton "Intervenir".
     readonly_fields = [f.name for f in Request._meta.fields]
+    actions_detail = ["intervene"]
 
     @display(description="Statut", label=STATUS_LABELS)
     def status_display(self, obj):
@@ -129,6 +169,41 @@ class RequestAdmin(JSONWidgetMixin, ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    @action(
+        description="Intervenir",
+        url_path="intervenir",
+        permissions=["change"],
+        icon="build",
+        dialog={
+            "title": "Intervention administrative",
+            "description": (
+                "À utiliser uniquement en cas de blocage exceptionnel "
+                "(ex: approbateur parti sans délégation active)."
+            ),
+            "form_class": InterventionForm,
+            "form_submit_text": "Confirmer",
+        },
+    )
+    def intervene(self, request, form, object_id=None):
+        obj = self.get_object(request, object_id)
+        change_url = reverse(
+            f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change",
+            args=[object_id],
+        )
+
+        engine = WorkflowEngine(obj)
+        data = form.cleaned_data
+        try:
+            if data["action_type"] == "force_advance":
+                engine.force_advance(request.user, data["comment"])
+            else:
+                engine.reassign(request.user, [data["new_approver"].id], data["comment"])
+            messages.success(request, "Intervention effectuée avec succès.")
+        except RoutingError as exc:
+            messages.error(request, str(exc))
+
+        return redirect(change_url)
 
 
 #creation de modèle de création de délégation par un admin.

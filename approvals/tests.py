@@ -152,3 +152,69 @@ class WorkflowEngineTests(TestCase):
 
         request.refresh_from_db()
         self.assertEqual(request.snapshot_metadata["workflow_snapshot"], snapshot_before)
+
+
+class InterventionTests(TestCase):
+    """Bouton "Intervenir" pour les demandes bloquées (Manuel d'Administration §6.1)."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user("admin1", password="x", is_staff=True)
+        self.manager = User.objects.create_user("manager1", password="x")
+        self.backup_manager = User.objects.create_user("backup_manager", password="x")
+        self.employee = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=self.employee, manager=self.manager)
+
+        self.request_type = RequestType.objects.create(
+            name="Note de frais", code="EXPENSE",
+            form_schema={"fields": [{"name": "montant", "type": "decimal", "required": True}]},
+        )
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={}, approvers_config={"type": "manager"}
+        )
+        self.request = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, data={"montant": 500}
+        )
+        self.engine = WorkflowEngine(self.request)
+        self.engine.submit(actor=self.employee)
+
+    def test_force_advance_requires_comment(self):
+        with self.assertRaises(RoutingError):
+            self.engine.force_advance(self.admin, "")
+
+    def test_force_advance_completes_request_when_last_level(self):
+        self.engine.force_advance(self.admin, "Manager parti sans délégation")
+        self.request.refresh_from_db()
+        self.assertEqual(self.request.status, Request.Status.APPROVED)
+        self.assertTrue(
+            ApprovalLog.objects.filter(
+                request=self.request, action_type=ApprovalLog.ActionType.FORCE_ADVANCE
+            ).exists()
+        )
+
+    def test_reassign_changes_effective_approver(self):
+        self.engine.reassign(self.admin, [self.backup_manager.id], "Manager en arrêt maladie")
+        self.request.refresh_from_db()
+        self.assertEqual(
+            WorkflowEngine(self.request).get_effective_approvers(), [self.backup_manager.id]
+        )
+        # Le titulaire d'origine n'est plus habilité, le remplaçant désigné l'est.
+        with self.assertRaises(RoutingError):
+            WorkflowEngine(self.request).approve(self.manager, "ok")
+        WorkflowEngine(self.request).approve(self.backup_manager, "ok")
+        self.request.refresh_from_db()
+        self.assertEqual(self.request.status, Request.Status.APPROVED)
+        self.assertTrue(
+            ApprovalLog.objects.filter(
+                request=self.request, action_type=ApprovalLog.ActionType.REASSIGN
+            ).exists()
+        )
+
+    def test_reassign_requires_new_approver(self):
+        with self.assertRaises(RoutingError):
+            self.engine.reassign(self.admin, [], "commentaire")
+
+    def test_intervention_only_allowed_while_pending(self):
+        self.engine.reject(self.manager, "refus")
+        self.request.refresh_from_db()
+        with self.assertRaises(RoutingError):
+            WorkflowEngine(self.request).force_advance(self.admin, "trop tard")

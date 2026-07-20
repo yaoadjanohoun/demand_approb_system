@@ -268,6 +268,70 @@ class WorkflowEngine:
         self._log(actor, ApprovalLog.ActionType.RETURN, previous_status, request.status, comment=comment)
         return request
 
+    # ------------------------------------------------------------------
+    # Intervention administrative (cf. Manuel d'Administration §6.1 : demande
+    # bloquée car l'approbateur a quitté l'entreprise sans délégation, etc.)
+    # ------------------------------------------------------------------
+    def force_advance(self, actor, comment):
+        """Force le passage au niveau suivant sans validation individuelle."""
+        if not comment:
+            raise RoutingError("Un commentaire est obligatoire pour une intervention administrative.")
+        request = self.request
+        if request.status != Request.Status.PENDING:
+            raise RoutingError("Seule une demande en attente peut faire l'objet d'une intervention.")
+        entry = self._current_entry()
+        if entry is None:
+            raise RoutingError("Aucun niveau courant trouvé pour cette demande.")
+
+        entry["status"] = "forced"
+        previous_status = request.status
+        next_entry = self._find_entry(request.current_level + 1)
+
+        if next_entry:
+            request.current_level += 1
+            request.save()
+            self._log(
+                actor, ApprovalLog.ActionType.FORCE_ADVANCE, previous_status, request.status,
+                comment=comment, context={"level": request.current_level - 1},
+            )
+            self._activate_level(request.current_level)
+        else:
+            request.status = Request.Status.APPROVED
+            request.completed_at = timezone.now()
+            request.save()
+            self._log(
+                actor, ApprovalLog.ActionType.FORCE_ADVANCE, previous_status, request.status,
+                comment=comment, context={"level": request.current_level},
+            )
+        return request
+
+    def reassign(self, actor, new_approver_ids, comment):
+        """Réassigne manuellement le niveau courant à d'autres utilisateurs."""
+        if not comment:
+            raise RoutingError("Un commentaire est obligatoire pour une réassignation.")
+        if not new_approver_ids:
+            raise RoutingError("Sélectionnez au moins un nouvel approbateur.")
+        request = self.request
+        if request.status != Request.Status.PENDING:
+            raise RoutingError("Seule une demande en attente peut être réassignée.")
+        entry = self._current_entry()
+        if entry is None:
+            raise RoutingError("Aucun niveau courant trouvé pour cette demande.")
+
+        previous_ids = entry.get("active_approver_ids", entry["approver_ids"])
+        entry["active_approver_ids"] = list(new_approver_ids)
+        request.save()
+        self._log(
+            actor, ApprovalLog.ActionType.REASSIGN, request.status, request.status,
+            comment=comment,
+            context={
+                "level": request.current_level,
+                "previous_approver_ids": previous_ids,
+                "new_approver_ids": list(new_approver_ids),
+            },
+        )
+        return request
+
     def resubmit(self, actor=None):
         request = self.request
         if request.status != Request.Status.RETURNED:
