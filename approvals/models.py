@@ -27,9 +27,22 @@ class UserProfile(models.Model):
         blank=True,
         related_name="direct_reports",
     )
-    department_id = models.IntegerField(null=True, blank=True)
+    department_id = models.IntegerField(
+        null=True, blank=True,
+        help_text="ID numérique utilisé par les critères de règles (ApprovalRule.criteria.department_ids). "
+        "À renseigner manuellement par un admin fonctionnel : l'annuaire AD ne fournit qu'un nom "
+        "de département (department_name), pas d'identifiant numérique stable.",
+    )
     site_id = models.IntegerField(null=True, blank=True)
     country_code = models.CharField(max_length=2, null=True, blank=True)
+
+    # Champs informatifs synchronisés depuis Active Directory à la connexion
+    # (voir approvals/auth_backends.py). Non utilisés par le moteur de routage
+    # (qui s'appuie sur department_id/site_id, configurés par un admin fonctionnel) :
+    # ils servent de repère pour faire ce mapping, pas de source de vérité pour les règles.
+    department_name = models.CharField(max_length=100, null=True, blank=True)
+    site_name = models.CharField(max_length=100, null=True, blank=True)
+    last_ad_sync = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Profil de {self.user}"

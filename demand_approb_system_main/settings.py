@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 from django.urls import reverse_lazy
@@ -125,6 +126,34 @@ STATIC_URL = 'static/'
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'approvals:dashboard'
 LOGOUT_REDIRECT_URL = 'login'
+
+# Authentification Active Directory (voir "Les Spécifications Techniques" §1.1).
+# Backend LDAP en premier (aucun mot de passe local pour un compte AD), puis
+# ModelBackend en repli — nécessaire tant qu'AUTH_LDAP_SERVER_URI n'est pas
+# configuré (poste de développement local) et pour les comptes de service
+# techniques (superuser Django) qui n'existent pas dans l'annuaire.
+AUTHENTICATION_BACKENDS = [
+    'approvals.auth_backends.ActiveDirectoryBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# Toutes les valeurs viennent de variables d'environnement : jamais de secret
+# (mot de passe du compte de service) en dur dans le code source (cf. Spécifications
+# Techniques §1.2). AUTH_LDAP_SERVER_URI vide = backend AD inactif (dev local).
+AUTH_LDAP_SERVER_URI = os.environ.get('AD_LDAP_SERVER_URI', '')
+AUTH_LDAP_BIND_DN = os.environ.get('AD_LDAP_BIND_DN', '')
+AUTH_LDAP_BIND_PASSWORD = os.environ.get('AD_LDAP_BIND_PASSWORD', '')
+AUTH_LDAP_USER_SEARCH_BASE = os.environ.get('AD_LDAP_USER_SEARCH_BASE', '')
+AUTH_LDAP_USER_SEARCH_FILTER = os.environ.get('AD_LDAP_USER_SEARCH_FILTER', '(sAMAccountName={username})')
+AUTH_LDAP_USERNAME_ATTR = os.environ.get('AD_LDAP_USERNAME_ATTR', 'sAMAccountName')
+AUTH_LDAP_ATTR_MAP = {
+    'first_name': 'givenName',
+    'last_name': 'sn',
+    'email': 'mail',
+    'manager': 'manager',
+    'department': 'department',
+    'site': 'physicalDeliveryOfficeName',
+}
 
 UNFOLD = {
     "SITE_TITLE": "Administration — Demandes & Approbation",

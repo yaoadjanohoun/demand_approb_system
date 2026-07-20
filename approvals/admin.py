@@ -51,9 +51,29 @@ class NamedFieldWidgetMixin:
 #création du profil admin
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
-    list_display = ("user", "manager", "department_id", "site_id", "country_code")
-    search_fields = ("user__username",)
+    list_display = (
+        "user", "manager", "department_id", "department_name", "site_id",
+        "site_name", "country_code", "last_ad_sync",
+    )
+    list_filter = ("department_name", "site_name")
+    search_fields = ("user__username", "department_name", "site_name")
     autocomplete_fields = ("user", "manager")
+    readonly_fields = ("department_name", "site_name", "last_ad_sync")
+    fieldsets = (
+        (None, {"fields": ("user", "manager", "country_code")}),
+        (
+            "Utilisées par le moteur de routage",
+            {
+                "fields": ("department_id", "site_id"),
+                "description": "Renseignées manuellement par un admin fonctionnel : "
+                "l'annuaire AD ne fournit pas d'identifiant numérique stable pour ces champs.",
+            },
+        ),
+        (
+            "Synchronisées depuis Active Directory (lecture seule)",
+            {"fields": ("department_name", "site_name", "last_ad_sync")},
+        ),
+    )
 
 
 class ApprovalRuleInline(NamedFieldWidgetMixin, admin.TabularInline):
