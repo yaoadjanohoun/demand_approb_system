@@ -12,7 +12,7 @@ from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
 from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
-from .widgets import CriteriaBuilderWidget, FormSchemaBuilderWidget
+from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSchemaBuilderWidget
 
 STATUS_LABELS = {
     "Brouillon": "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100",
@@ -64,7 +64,7 @@ class ApprovalRuleInline(NamedFieldWidgetMixin, admin.TabularInline):
     # Pour ajouter d'autres règles au même type, utiliser la page "Règles d'approbation".
     extra = 1
     fields = ("level", "is_active", "criteria", "approvers_config", "created_by")
-    field_widgets = {"criteria": CriteriaBuilderWidget}
+    field_widgets = {"criteria": CriteriaBuilderWidget, "approvers_config": ApproversConfigBuilderWidget}
 
 
 #creation du modele de requete d'approbation d'un type admin
@@ -107,7 +107,7 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
 # creation de modèle des règles d'approbation d'un compte admin
 @admin.register(ApprovalRule)
 class ApprovalRuleAdmin(NamedFieldWidgetMixin, ModelAdmin):
-    field_widgets = {"criteria": CriteriaBuilderWidget}
+    field_widgets = {"criteria": CriteriaBuilderWidget, "approvers_config": ApproversConfigBuilderWidget}
     list_display = ("request_type", "level", "is_active", "created_by", "updated_at")
     list_filter = ("request_type", "is_active", "level")
     autocomplete_fields = ("created_by",)
@@ -124,10 +124,7 @@ class ApprovalRuleAdmin(NamedFieldWidgetMixin, ModelAdmin):
             "Approbateur (approvers_config)",
             {
                 "fields": ("approvers_config",),
-                "description": (
-                    'Ex: {"type": "manager"}, {"type": "user", "user_id": 5}, '
-                    '{"type": "group", "group_id": 2}.'
-                ),
+                "description": "Choisissez qui doit approuver à ce niveau.",
             },
         ),
         ("Traçabilité", {"fields": ("created_by",)}),

@@ -9,6 +9,7 @@ pas, donc la validation serveur reste inchangée quel que soit le widget utilis�
 import json
 
 from django import forms
+from django.contrib.auth.models import Group, User
 from django.utils.safestring import mark_safe
 
 FIELD_TYPE_CHOICES = [
@@ -255,6 +256,123 @@ class CriteriaBuilderWidget(forms.Textarea):
       }}
     }});
     textarea.value = JSON.stringify(criteria);
+  }}
+
+  const form = container.closest("form");
+  if (form) {{
+    form.addEventListener("submit", sync);
+  }}
+}})();
+</script>
+""")
+
+
+APPROVER_TYPE_CHOICES = [
+    ("user", "Utilisateur spécifique"),
+    ("group", "Groupe (n'importe quel membre peut valider)"),
+    ("manager", "Manager du demandeur"),
+]
+
+
+class ApproversConfigBuilderWidget(forms.Textarea):
+    """Constructeur visuel pour ApprovalRule.approvers_config.
+
+    Ne propose que les modes de résolution effectivement gérés par le moteur
+    de routage (user/group/manager) — "role" et "custom" existent dans le
+    schéma mais nécessitent un modèle d'organisation pas encore construit
+    (voir WorkflowEngine._resolve_approvers).
+    """
+
+    def render(self, name, value, attrs=None, renderer=None):
+        textarea_html = super().render(name, value, attrs, renderer)
+        widget_id = (attrs or {}).get("id", f"id_{name}")
+        try:
+            initial = json.loads(value) if value else {}
+        except (TypeError, ValueError):
+            initial = {}
+
+        users = [(u.id, u.get_full_name() or u.username) for u in User.objects.filter(is_active=True).order_by("username")]
+        groups = [(g.id, g.name) for g in Group.objects.order_by("name")]
+
+        return mark_safe(f"""
+<div class="acb-builder" data-textarea-id="{widget_id}" style="max-width: 560px;">
+  <label style="display:block; font-weight:600; margin-bottom:4px;">Mode de résolution</label>
+  <select class="acb-type"></select>
+
+  <div class="acb-field acb-field-user" style="margin-top:8px; display:none;">
+    <label style="display:block; font-weight:600; margin-bottom:4px;">Utilisateur</label>
+    <select class="acb-user"></select>
+  </div>
+
+  <div class="acb-field acb-field-group" style="margin-top:8px; display:none;">
+    <label style="display:block; font-weight:600; margin-bottom:4px;">Groupe</label>
+    <select class="acb-group"></select>
+  </div>
+
+  <div class="acb-field acb-field-manager" style="margin-top:8px; display:none;">
+    <label style="display:block; font-weight:600; margin-bottom:4px;">Utilisateur de repli (si le demandeur n'a pas de manager)</label>
+    <select class="acb-fallback"></select>
+  </div>
+
+  <div style="display:none;">{textarea_html}</div>
+</div>
+<script>
+(function() {{
+  const TYPE_OPTIONS = {json.dumps(APPROVER_TYPE_CHOICES)};
+  const USERS = {json.dumps(users)};
+  const GROUPS = {json.dumps(groups)};
+  const container = document.currentScript.previousElementSibling;
+  const textarea = document.getElementById("{widget_id}");
+
+  const typeSelect = container.querySelector(".acb-type");
+  const userSelect = container.querySelector(".acb-user");
+  const groupSelect = container.querySelector(".acb-group");
+  const fallbackSelect = container.querySelector(".acb-fallback");
+
+  function fillOptions(select, options, selectedValue, allowBlank) {{
+    select.innerHTML = "";
+    if (allowBlank) {{
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = "---------";
+      select.appendChild(blank);
+    }}
+    options.forEach(function(opt) {{
+      const o = document.createElement("option");
+      o.value = opt[0];
+      o.textContent = opt[1];
+      if (String(opt[0]) === String(selectedValue)) o.selected = true;
+      select.appendChild(o);
+    }});
+  }}
+
+  const initial = {json.dumps(initial)};
+
+  fillOptions(typeSelect, TYPE_OPTIONS, initial.type || "manager", false);
+  fillOptions(userSelect, USERS, initial.user_id, true);
+  fillOptions(groupSelect, GROUPS, initial.group_id, true);
+  fillOptions(fallbackSelect, USERS, initial.fallback_user_id, true);
+
+  function updateVisibility() {{
+    const type = typeSelect.value;
+    container.querySelector(".acb-field-user").style.display = type === "user" ? "block" : "none";
+    container.querySelector(".acb-field-group").style.display = type === "group" ? "block" : "none";
+    container.querySelector(".acb-field-manager").style.display = type === "manager" ? "block" : "none";
+  }}
+  updateVisibility();
+  typeSelect.addEventListener("change", updateVisibility);
+
+  function sync() {{
+    const type = typeSelect.value;
+    const config = {{type: type}};
+    if (type === "user" && userSelect.value) {{
+      config.user_id = parseInt(userSelect.value, 10);
+    }} else if (type === "group" && groupSelect.value) {{
+      config.group_id = parseInt(groupSelect.value, 10);
+    }} else if (type === "manager" && fallbackSelect.value) {{
+      config.fallback_user_id = parseInt(fallbackSelect.value, 10);
+    }}
+    textarea.value = JSON.stringify(config);
   }}
 
   const form = container.closest("form");
