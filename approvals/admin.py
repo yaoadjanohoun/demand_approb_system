@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType
+from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "manager", "department_id", "site_id", "country_code")
+    search_fields = ("user__username",)
 
 
 @admin.register(RequestType)

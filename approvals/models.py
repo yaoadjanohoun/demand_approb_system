@@ -11,6 +11,30 @@ from .validators import (
 )
 
 
+class UserProfile(models.Model):
+    """Données organisationnelles minimales nécessaires au moteur de routage
+    (manager, département, site). En production, ces données proviendront
+    d'Active Directory ; ce modèle sert de source locale en attendant l'intégration LDAP.
+    """
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="profile"
+    )
+    manager = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="direct_reports",
+    )
+    department_id = models.IntegerField(null=True, blank=True)
+    site_id = models.IntegerField(null=True, blank=True)
+    country_code = models.CharField(max_length=2, null=True, blank=True)
+
+    def __str__(self):
+        return f"Profil de {self.user}"
+
+
 class RequestType(models.Model):
     """Catégorie de demande et structure de son formulaire dynamique."""
 
