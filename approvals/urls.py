@@ -1,11 +1,14 @@
 from django.urls import path
 
-from . import views
+from . import auth_views, views
 
 app_name = "approvals"
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("inscription/", auth_views.register, name="register"),
+    path("confirmer-email/<str:token>/", auth_views.confirm_email, name="confirm_email"),
+    path("connexion/confirmer/<str:token>/", auth_views.confirm_login, name="confirm_login"),
     path("mine/", views.my_requests, name="my_requests"),
     path("pending/", views.pending_approvals, name="pending_approvals"),
     path("rapports/", views.reports, name="reports"),

@@ -349,6 +349,8 @@ class WorkflowEngine:
             )
         return request
 
+    #reassignation manuelle de la demande
+    
     def reassign(self, actor, new_approver_ids, comment):
         """Réassigne manuellement le niveau courant à d'autres utilisateurs."""
         if not comment:

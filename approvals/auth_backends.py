@@ -1,4 +1,4 @@
-"""Authentification Active Directory (voir "Les Spécifications Techniques" §1.1) :
+"""Authentification Active Directory (voir "Les Spécifications Techniques") :
 "Aucun mot de passe interne n'est stocké dans la base de données Django."
 
 Implémentation via `ldap3` (pur Python) plutôt que `django-auth-ldap`/`python-ldap`

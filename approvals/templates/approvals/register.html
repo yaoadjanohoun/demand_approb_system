@@ -1,0 +1,17 @@
+{% extends "approvals/base.html" %}
+{% block title %}Inscription{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 420px; margin: 0 auto;">
+    <h1>Créer un compte</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem;">S'inscrire</button>
+    </form>
+    <p style="margin-top:1rem; font-size:0.9rem; color:#6b7280;">
+        Après inscription, un email de confirmation te sera envoyé. Une fois ton adresse
+        confirmée, un administrateur devra encore activer ton compte avant que tu puisses
+        te connecter.
+    </p>
+</div>
+{% endblock %}

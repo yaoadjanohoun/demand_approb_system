@@ -1,14 +1,20 @@
+import secrets
 import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from . import crypto
 from .validators import (
     validate_approvers_config,
     validate_criteria,
     validate_form_schema,
 )
+
+
+def _generate_token():
+    return secrets.token_urlsafe(32)
 
 
 class UserProfile(models.Model):
@@ -43,6 +49,12 @@ class UserProfile(models.Model):
     department_name = models.CharField(max_length=100, null=True, blank=True)
     site_name = models.CharField(max_length=100, null=True, blank=True)
     last_ad_sync = models.DateTimeField(null=True, blank=True)
+
+    # Inscription en ligne (voir approvals/auth_views.py). L'email confirmé
+    # est nécessaire mais pas suffisant pour se connecter : l'activation du
+    # compte (et l'assignation d'un rôle/manager/département) reste une
+    # action distincte réservée à un admin fonctionnel.
+    email_confirmed_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"Profil de {self.user}"
@@ -262,3 +274,95 @@ class ApprovalLog(models.Model):
 
     def __str__(self):
         return f"{self.get_action_type_display()} - {self.timestamp:%Y-%m-%d %H:%M}"
+
+
+class EmailSettings(models.Model):
+    """Configuration SMTP administrable sans toucher au code (retour client :
+    "on va utiliser gmail pour les tests après nous aurons à le changer, pas
+    directement dans le code mais directement dans l'espace admin"). Une seule
+    ligne active à la fois ; DBEmailBackend (approvals/email_backend.py) l'utilise
+    pour l'envoi. Si aucune n'est active, les emails partent sur la console
+    (mode dégradé sûr pour le développement local).
+    """
+
+    label = models.CharField(max_length=100, help_text='Ex: "Gmail (test)", "Exchange (production)".')
+    is_active = models.BooleanField(
+        default=False,
+        help_text="Une seule configuration active à la fois (la dernière activée gagne).",
+    )
+    host = models.CharField(max_length=255)
+    port = models.PositiveIntegerField(default=587)
+    username = models.CharField(max_length=255, blank=True)
+    _password_encrypted = models.TextField(db_column="password_encrypted", blank=True)
+    use_tls = models.BooleanField(default=True)
+    from_email = models.EmailField(help_text="Adresse affichée comme expéditeur.")
+    require_login_confirmation = models.BooleanField(
+        default=True,
+        help_text="Si activé, la connexion nécessite de cliquer un lien reçu par email "
+        "avant d'être effective (double authentification par email).",
+    )
+
+    class Meta:
+        verbose_name = "Configuration email"
+        verbose_name_plural = "Configuration email"
+
+    @property
+    def password(self):
+        return crypto.decrypt(self._password_encrypted)
+
+    @password.setter
+    def password(self, value):
+        self._password_encrypted = crypto.encrypt(value)
+
+    def save(self, *args, **kwargs):
+        if self.is_active:
+            EmailSettings.objects.exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_active(cls):
+        return cls.objects.filter(is_active=True).first()
+
+    def __str__(self):
+        return f"{self.label} ({'active' if self.is_active else 'inactive'})"
+
+
+class EmailToken(models.Model):
+    """Jeton à usage unique envoyé par email : confirmation d'inscription ou
+    validation de connexion (double authentification par email)."""
+
+    class Purpose(models.TextChoices):
+        EMAIL_CONFIRM = "EMAIL_CONFIRM", "Confirmation d'inscription"
+        LOGIN_CONFIRM = "LOGIN_CONFIRM", "Confirmation de connexion"
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="email_tokens")
+    purpose = models.CharField(max_length=20, choices=Purpose.choices)
+    token = models.CharField(max_length=64, unique=True, default=_generate_token)
+    # Pour LOGIN_CONFIRM : quel backend (AD ou local) a authentifié l'utilisateur
+    # au moment de la saisie du mot de passe, pour finaliser login() avec le même
+    # backend une fois le lien cliqué (Django l'exige).
+    backend_path = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    LIFETIMES = {
+        Purpose.EMAIL_CONFIRM: 60 * 60 * 48,   # 48h pour confirmer une inscription
+        Purpose.LOGIN_CONFIRM: 60 * 15,        # 15 min pour un lien de connexion
+    }
+
+    def is_valid(self):
+        from django.utils import timezone
+
+        if self.used_at is not None:
+            return False
+        age = (timezone.now() - self.created_at).total_seconds()
+        return age <= self.LIFETIMES[self.purpose]
+
+    def mark_used(self):
+        from django.utils import timezone
+
+        self.used_at = timezone.now()
+        self.save(update_fields=["used_at"])
+
+    def __str__(self):
+        return f"{self.get_purpose_display()} - {self.user}"

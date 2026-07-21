@@ -1,0 +1,10 @@
+{% extends "approvals/base.html" %}
+{% block title %}Confirme ta connexion{% endblock %}
+{% block content %}
+<div class="card" style="max-width: 420px; margin: 0 auto;">
+    <h1>Confirme ta connexion</h1>
+    <p>Un lien de connexion a été envoyé à <strong>{{ email }}</strong>.</p>
+    <p>Clique dessus dans les 15 minutes pour finaliser ta connexion.</p>
+    <p><a href="{% url 'login' %}">Retour à la connexion</a></p>
+</div>
+{% endblock %}

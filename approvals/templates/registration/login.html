@@ -12,6 +12,10 @@
         </label>
         <button type="submit" class="btn btn-primary" style="margin-top:1rem;">Se connecter</button>
     </form>
+    <p style="margin-top:1rem; font-size:0.9rem;">
+        <a href="{% url 'password_reset' %}">Mot de passe oublié ?</a>
+        · <a href="{% url 'approvals:register' %}">Créer un compte</a>
+    </p>
 </div>
 <script>
     document.getElementById('toggle-password').addEventListener('change', function () {

@@ -44,6 +44,11 @@ ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').s
 INSTALLED_APPS = [
     'unfold',  # doit précéder django.contrib.admin
     'unfold.contrib.filters',
+    # `approvals` doit précéder django.contrib.admin : le loader de templates
+    # (app_directories) s'arrête à la première app qui fournit un chemin donné,
+    # et django.contrib.admin fournit ses propres registration/password_reset_*.html
+    # qui écraseraient silencieusement les nôtres si admin passait en premier.
+    'approvals',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -51,7 +56,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'django_json_widget',
-    'approvals',
 ]
 
 MIDDLEWARE = [
@@ -165,6 +169,15 @@ USE_I18N = True
 USE_TZ = True
 
 
+# Email (inscription, confirmation de connexion, réinitialisation de mot de
+# passe). La configuration SMTP réelle (hôte, identifiants) vit en base via
+# EmailSettings, modifiable depuis l'admin sans toucher au code ni redéployer
+# (retour client) — voir approvals/email_backend.py. Sans configuration
+# active, les emails partent sur la console (mode dégradé sûr en dev local).
+EMAIL_BACKEND = 'approvals.email_backend.DBEmailBackend'
+DEFAULT_FROM_EMAIL = os.environ.get('DJANGO_DEFAULT_FROM_EMAIL', 'noreply@example.local')
+
+
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
@@ -255,8 +268,8 @@ AUTH_LDAP_ATTR_MAP = {
 }
 
 UNFOLD = {
-    "SITE_TITLE": "Administration — Demandes & Approbation",
-    "SITE_HEADER": "Demandes & Approbation",
+    "SITE_TITLE": "Administration — Demandes et Approbation",
+    "SITE_HEADER": "Demandes et Approbation",
     "SITE_SYMBOL": "rule",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
@@ -326,6 +339,17 @@ UNFOLD = {
                         "title": "Groupes",
                         "icon": "groups",
                         "link": reverse_lazy("admin:auth_group_changelist"),
+                    },
+                ],
+            },
+            {
+                "title": "Sécurité",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Configuration email",
+                        "icon": "mail",
+                        "link": reverse_lazy("admin:approvals_emailsettings_changelist"),
                     },
                 ],
             },

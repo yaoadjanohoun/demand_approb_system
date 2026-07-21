@@ -10,9 +10,14 @@ from unfold.decorators import action, display
 from unfold.forms import BaseDialogForm
 from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
-from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
+from .models import ApprovalLog, ApprovalRule, Delegation, EmailSettings, Request, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
 from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSchemaBuilderWidget
+
+
+admin.site.site_header = "Système de Demandes et d'Approbation — Administration"
+admin.site.site_title = "Système de Demandes et d'Approbation"
+admin.site.index_title = "Tableau de bord de l'Administration"
 
 STATUS_LABELS = {
     "Brouillon": "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100",
@@ -52,13 +57,14 @@ class NamedFieldWidgetMixin:
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
     list_display = (
-        "user", "manager", "department_id", "department_name", "site_id",
-        "site_name", "country_code", "last_ad_sync",
+        "user", "compte_actif_display", "email_confirmee_display", "manager",
+        "department_id", "department_name", "site_id", "site_name", "country_code",
     )
     list_filter = ("department_name", "site_name")
     search_fields = ("user__username", "department_name", "site_name")
     autocomplete_fields = ("user", "manager")
-    readonly_fields = ("department_name", "site_name", "last_ad_sync")
+    readonly_fields = ("department_name", "site_name", "last_ad_sync", "email_confirmed_at")
+    actions = ["activer_les_comptes"]
     fieldsets = (
         (None, {"fields": ("user", "manager", "country_code")}),
         (
@@ -72,6 +78,85 @@ class UserProfileAdmin(ModelAdmin):
         (
             "Synchronisées depuis Active Directory (lecture seule)",
             {"fields": ("department_name", "site_name", "last_ad_sync")},
+        ),
+        (
+            "Inscription en ligne",
+            {"fields": ("email_confirmed_at",)},
+        ),
+    )
+
+    @display(description="Compte actif", boolean=True)
+    def compte_actif_display(self, obj):
+        return obj.user.is_active
+
+    @display(description="Email confirmé", boolean=True)
+    def email_confirmee_display(self, obj):
+        return obj.email_confirmed_at is not None
+
+    @admin.action(description="Activer les comptes sélectionnés (email confirmé requis)")
+    def activer_les_comptes(self, request, queryset):
+        eligible = queryset.filter(email_confirmed_at__isnull=False, user__is_active=False)
+        skipped = queryset.count() - eligible.count()
+        activated = 0
+        for profile in eligible.select_related("user"):
+            profile.user.is_active = True
+            profile.user.save(update_fields=["is_active"])
+            activated += 1
+        if activated:
+            messages.success(request, f"{activated} compte(s) activé(s).")
+        if skipped:
+            messages.warning(
+                request,
+                f"{skipped} compte(s) ignoré(s) (déjà actif ou email pas encore confirmé).",
+            )
+
+
+class EmailSettingsForm(forms.ModelForm):
+    password = forms.CharField(
+        label="Mot de passe / clé d'application",
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Laisser vide pour conserver le mot de passe actuel.",
+    )
+
+    class Meta:
+        model = EmailSettings
+        fields = ["label", "is_active", "host", "port", "username", "use_tls", "from_email", "require_login_confirmation"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields["password"].initial = self.instance.password
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        new_password = self.cleaned_data.get("password")
+        if new_password:
+            instance.password = new_password
+        if commit:
+            instance.save()
+        return instance
+
+
+@admin.register(EmailSettings)
+class EmailSettingsAdmin(ModelAdmin):
+    """Configuration SMTP (ex: Gmail en test, Exchange en production) —
+    modifiable ici sans toucher au code (retour client). Réservé au super
+    admin : ni le groupe "Admins fonctionnels" ni admin_fonctionnel n'ont de
+    permission dessus par défaut (identifiants de messagerie sensibles)."""
+
+    form = EmailSettingsForm
+    list_display = ("label", "host", "port", "is_active", "require_login_confirmation")
+    fieldsets = (
+        (None, {"fields": ("label", "is_active")}),
+        ("Serveur SMTP", {"fields": ("host", "port", "username", "password", "use_tls", "from_email")}),
+        (
+            "Sécurité",
+            {
+                "fields": ("require_login_confirmation",),
+                "description": "Si activé, chaque connexion nécessite de cliquer un lien reçu par "
+                "email (double authentification par email) avant d'être effective.",
+            },
         ),
     )
 
