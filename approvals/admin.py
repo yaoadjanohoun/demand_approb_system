@@ -209,7 +209,7 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
         ),
         (
             "Options avancées",
-            {"fields": ("resume_on_resubmit", "is_sensitive")},
+            {"fields": ("resume_on_resubmit", "is_sensitive", "default_currency")},
         ),
     )
 

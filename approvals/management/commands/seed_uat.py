@@ -100,6 +100,7 @@ class Command(BaseCommand):
             defaults={
                 "name": "Note de frais",
                 "is_active": True,
+                "default_currency": "EUR",
                 "form_schema": {"fields": [
                     {"name": "montant", "type": "decimal", "label": "Montant", "required": True},
                     {"name": "motif", "type": "text", "label": "Motif", "required": True},

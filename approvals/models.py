@@ -68,6 +68,11 @@ class RequestType(models.Model):
     is_active = models.BooleanField(default=True)
     form_schema = models.JSONField(default=dict, validators=[validate_form_schema])
     schema_version = models.IntegerField(default=1)
+    default_currency = models.CharField(
+        max_length=10, blank=True, default="",
+        help_text="Devise affichée pour les montants de ce type de demande (ex: EUR, USD, CAD). "
+        "Laisser vide si ce type ne comporte pas de montant.",
+    )
     resume_on_resubmit = models.BooleanField(
         default=False,
         help_text="Si activé, une demande retournée puis resoumise reprend au niveau bloqué "

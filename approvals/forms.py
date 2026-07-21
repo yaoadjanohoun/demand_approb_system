@@ -47,6 +47,8 @@ def labeled_data(request_type, data):
     (champ supprimé depuis) gardent leur nom technique en repli."""
     field_defs = request_type.form_schema.get("fields", [])
     labels = {f["name"]: f.get("label") or f["name"].replace("_", " ").capitalize() for f in field_defs}
+    decimal_fields = {f["name"] for f in field_defs if f["type"] == "decimal"}
+    currency = request_type.default_currency
 
     rows = []
     seen = set()
@@ -54,17 +56,19 @@ def labeled_data(request_type, data):
         name = field_def["name"]
         if name not in data:
             continue
-        rows.append({"label": labels[name], "value": _format_value(data[name])})
+        rows.append({"label": labels[name], "value": _format_value(data[name], name in decimal_fields, currency)})
         seen.add(name)
     for name, value in data.items():
         if name not in seen:
-            rows.append({"label": labels.get(name, name), "value": _format_value(value)})
+            rows.append({"label": labels.get(name, name), "value": _format_value(value, name in decimal_fields, currency)})
     return rows
 
 
-def _format_value(value):
+def _format_value(value, is_decimal=False, currency=""):
     if isinstance(value, bool):
         return "Oui" if value else "Non"
     if value is None or value == "":
         return "—"
+    if is_decimal and currency:
+        return f"{value} {currency}"
     return value
