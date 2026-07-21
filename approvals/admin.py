@@ -10,7 +10,9 @@ from unfold.decorators import action, display
 from unfold.forms import BaseDialogForm
 from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
-from .models import ApprovalLog, ApprovalRule, Delegation, EmailSettings, Request, RequestType, UserProfile
+from .models import (
+    ApprovalLog, ApprovalRule, Delegation, EmailSettings, Request, RequestAttachment, RequestType, UserProfile,
+)
 from .services import RoutingError, WorkflowEngine
 from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSchemaBuilderWidget
 
@@ -297,6 +299,17 @@ class InterventionForm(BaseDialogForm):
         return cleaned
 
 
+class RequestAttachmentInline(admin.TabularInline):
+    model = RequestAttachment
+    extra = 0
+    fields = ("file", "uploaded_by", "uploaded_at")
+    readonly_fields = ("file", "uploaded_by", "uploaded_at")
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 #creation de modeme des requetes d'admin
 @admin.register(Request)
 class RequestAdmin(JSONWidgetMixin, ModelAdmin):
@@ -307,6 +320,7 @@ class RequestAdmin(JSONWidgetMixin, ModelAdmin):
     # (pas de recalcul du niveau, pas d'entrée dans ApprovalLog). Les décisions
     # se prennent depuis l'interface de soumission/approbation ou le bouton "Intervenir".
     readonly_fields = [f.name for f in Request._meta.fields]
+    inlines = [RequestAttachmentInline]
     actions_detail = ["intervene"]
 
     @display(description="Statut", label=STATUS_LABELS)

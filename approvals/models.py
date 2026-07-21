@@ -147,7 +147,7 @@ class ApprovalRule(models.Model):
 
     def specificity(self):
         """Nombre de conditions de la règle. Sert à départager les règles qui se
-        chevauchent (cf. Manuel d'Administration §4.3) : la plus spécifique gagne."""
+        chevauchent : la plus spécifique gagne."""
         return len(self.criteria or {})
 
     def is_default(self):
@@ -217,6 +217,40 @@ class Request(models.Model):
 
     def __str__(self):
         return f"{self.request_type.code} #{self.id} ({self.status})"
+
+
+ATTACHMENT_MAX_SIZE_MB = 5
+ATTACHMENT_ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf"]
+
+
+def validate_attachment_size(file):
+    if file.size > ATTACHMENT_MAX_SIZE_MB * 1024 * 1024:
+        raise ValidationError(f"Le fichier ne doit pas dépasser {ATTACHMENT_MAX_SIZE_MB} Mo.")
+
+
+class RequestAttachment(models.Model):
+    """Pièce jointe libre sur une demande —
+    disponible pour tous les types de demande, sans configuration par
+    l'admin (retour client : pas seulement pour les congés)."""
+
+    request = models.ForeignKey(Request, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(
+        upload_to="request_attachments/%Y/%m/",
+        validators=[FileExtensionValidator(ATTACHMENT_ALLOWED_EXTENSIONS), validate_attachment_size],
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["uploaded_at"]
+
+    def filename(self):
+        return self.file.name.rsplit("/", 1)[-1]
+
+    def __str__(self):
+        return self.filename()
 
 
 class Delegation(models.Model):
@@ -387,3 +421,5 @@ class EmailToken(models.Model):
 
     def __str__(self):
         return f"{self.get_purpose_display()} - {self.user}"
+
+

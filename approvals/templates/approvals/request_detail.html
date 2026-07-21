@@ -27,6 +27,17 @@
     {% endif %}
 </div>
 
+{% if attachments %}
+<div class="card">
+    <div class="card-title">Pièces jointes</div>
+    <ul class="attachment-list">
+        {% for attachment in attachments %}
+            <li><a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{{ attachment.filename }}</a></li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
 {% if is_current_approver %}
 <div class="card">
     <div class="card-title">Décision</div>

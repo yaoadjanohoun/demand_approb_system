@@ -15,10 +15,37 @@
     </div>
 </div>
 <div class="card">
-    <form method="post">
+    <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
-        {{ form.as_p }}
-        <p style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap;">
+        {{ form.non_field_errors }}
+
+        <div class="form-fields">
+            {% for field in form %}
+                <div class="form-field">
+                    <label for="{{ field.id_for_label }}">
+                        {{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.help_text %}<p class="field-help">{{ field.help_text }}</p>{% endif %}
+                    {{ field.errors }}
+                </div>
+            {% endfor %}
+
+            <div class="form-field">
+                <label for="id_attachments">Pièces jointes (optionnel)</label>
+                <input type="file" name="attachments" id="id_attachments" multiple accept=".jpg,.jpeg,.png,.pdf">
+                <p class="field-help">JPG, PNG ou PDF, 5 Mo maximum par fichier — pour appuyer ta demande (justificatif, fiche médicale, facture...).</p>
+                {% if existing_attachments %}
+                    <ul class="attachment-list">
+                        {% for attachment in existing_attachments %}
+                            <li><a href="{{ attachment.file.url }}" target="_blank" rel="noopener">{{ attachment.filename }}</a></li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+            </div>
+        </div>
+
+        <p style="margin-top:1.25rem; display:flex; gap:0.6rem; flex-wrap:wrap;">
             {% if not editing or is_draft %}
                 <button type="submit" name="action" value="draft" class="btn btn-secondary">Enregistrer comme brouillon</button>
             {% endif %}

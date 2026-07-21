@@ -1,13 +1,13 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from . import reports as reports_module
 from .forms import ProfilePhotoForm, build_dynamic_form, labeled_data
-from .models import Request, RequestType, UserProfile
+from .models import Request, RequestAttachment, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
 
 
@@ -62,17 +62,28 @@ def request_create(request, type_id):
     if request.method == "POST":
         action = request.POST.get("action", "submit")
         form = build_dynamic_form(request_type, data=request.POST)
+        attachment_files = request.FILES.getlist("attachments")
 
         if action == "draft":
             for field in form.fields.values():
                 field.required = False
             if form.is_valid():
-                new_request = Request.objects.create(
+                new_request = Request(
                     request_type=request_type,
                     requester=request.user,
                     status=Request.Status.DRAFT,
                     data=_serialize_form_data(form),
                 )
+                try:
+                    attachments = _build_attachments(new_request, attachment_files, request.user)
+                except ValidationError as exc:
+                    messages.error(request, " ".join(exc.messages))
+                    return render(
+                        request, "approvals/request_form.html",
+                        {"request_type": request_type, "form": form},
+                    )
+                new_request.save()
+                _save_attachments(attachments)
                 messages.success(request, "Brouillon enregistré.")
                 return redirect("approvals:request_edit", pk=new_request.pk)
         elif form.is_valid():
@@ -81,6 +92,14 @@ def request_create(request, type_id):
                 requester=request.user,
                 data=_serialize_form_data(form),
             )
+            try:
+                attachments = _build_attachments(new_request, attachment_files, request.user)
+            except ValidationError as exc:
+                messages.error(request, " ".join(exc.messages))
+                return render(
+                    request, "approvals/request_form.html",
+                    {"request_type": request_type, "form": form},
+                )
             engine = WorkflowEngine(new_request)
             try:
                 engine.submit(actor=request.user)
@@ -90,6 +109,7 @@ def request_create(request, type_id):
                     request, "approvals/request_form.html",
                     {"request_type": request_type, "form": form},
                 )
+            _save_attachments(attachments)
             messages.success(request, "Demande soumise avec succès.")
             return redirect("approvals:request_detail", pk=new_request.pk)
     else:
@@ -113,21 +133,36 @@ def request_edit(request, pk):
         return redirect("approvals:request_detail", pk=pk)
 
     is_draft = req.status == Request.Status.DRAFT
-    template_context = {"request_type": req.request_type, "editing": True, "is_draft": is_draft}
+    template_context = {
+        "request_type": req.request_type, "editing": True, "is_draft": is_draft,
+        "existing_attachments": req.attachments.all(),
+    }
 
     if request.method == "POST":
         action = request.POST.get("action", "submit")
         form = build_dynamic_form(req.request_type, data=request.POST)
+        attachment_files = request.FILES.getlist("attachments")
 
         if is_draft and action == "draft":
             for field in form.fields.values():
                 field.required = False
             if form.is_valid():
+                try:
+                    attachments = _build_attachments(req, attachment_files, request.user)
+                except ValidationError as exc:
+                    messages.error(request, " ".join(exc.messages))
+                    return render(request, "approvals/request_form.html", {**template_context, "form": form})
                 req.data = _serialize_form_data(form)
                 req.save()
+                _save_attachments(attachments)
                 messages.success(request, "Brouillon enregistré.")
                 return redirect("approvals:request_edit", pk=pk)
         elif form.is_valid():
+            try:
+                attachments = _build_attachments(req, attachment_files, request.user)
+            except ValidationError as exc:
+                messages.error(request, " ".join(exc.messages))
+                return render(request, "approvals/request_form.html", {**template_context, "form": form})
             req.data = _serialize_form_data(form)
             req.save()
             engine = WorkflowEngine(req)
@@ -139,6 +174,7 @@ def request_edit(request, pk):
             except RoutingError as exc:
                 messages.error(request, str(exc))
                 return render(request, "approvals/request_form.html", {**template_context, "form": form})
+            _save_attachments(attachments)
             messages.success(
                 request, "Demande soumise avec succès." if is_draft else "Demande resoumise avec succès."
             )
@@ -177,6 +213,24 @@ def _serialize_form_data(form):
                 value = float(value)
         data[name] = value
     return data
+
+
+def _build_attachments(req, files, user):
+    """Valide tous les fichiers avant d'en enregistrer un seul (tout ou rien) —
+    évite de laisser une demande avec une pièce jointe manquante à cause d'un
+    fichier invalide plus loin dans la sélection."""
+    attachments = [RequestAttachment(request=req, file=f, uploaded_by=user) for f in files]
+    for attachment in attachments:
+        # "request" est exclu : la demande parente n'est pas encore enregistrée à ce
+        # stade (validation "tout ou rien" avant toute écriture), donc la vérification
+        # de clé étrangère de Django échouerait à tort.
+        attachment.full_clean(exclude=["request"])
+    return attachments
+
+
+def _save_attachments(attachments):
+    for attachment in attachments:
+        attachment.save()
 
 
 def _pending_requests_for_user(user):
@@ -239,6 +293,7 @@ def request_detail(request, pk):
             "req": req,
             "data_rows": labeled_data(req.request_type, req.data),
             "logs": req.logs.select_related("actor"),
+            "attachments": req.attachments.all(),
             "is_current_approver": is_current_approver,
             "is_requester": is_requester,
             "back_url": back_url,

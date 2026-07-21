@@ -14,7 +14,7 @@ import tempfile
 from django.contrib.auth.models import User
 from django.test import Client, TestCase, override_settings
 
-from .models import ApprovalRule, Request, RequestType, UserProfile
+from .models import ApprovalRule, Request, RequestAttachment, RequestType, UserProfile
 
 
 class ApproverCanStillViewAfterActingTests(TestCase):
@@ -289,6 +289,88 @@ class DraftRequestTests(TestCase):
         )
         response = self.client.get(f"/{req.pk}/edit/")
         self.assertEqual(response.status_code, 403)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class RequestAttachmentTests(TestCase):
+    """Pièces jointes libres sur une demande (retour client) : disponibles pour
+    tous les types, pas seulement congés — un fichier invalide bloque toute la
+    soumission (tout ou rien), rien n'est enregistré à moitié."""
+
+    @classmethod
+    def tearDownClass(cls):
+        from django.conf import settings
+
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee1", password="x")
+        self.request_type = RequestType.objects.create(
+            name="Congés", code="LEAVE", is_active=True,
+            form_schema={"fields": [{"name": "motif", "type": "text", "required": False}]},
+        )
+        self.client.login(username="employee1", password="x")
+
+    def _pdf(self, name="justificatif.pdf"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return SimpleUploadedFile(name, b"%PDF-1.4 minimal", content_type="application/pdf")
+
+    def test_valid_attachment_saved_on_submit(self):
+        response = self.client.post(
+            f"/new/{self.request_type.id}/",
+            {"action": "submit", "motif": "test", "attachments": [self._pdf()]},
+        )
+        self.assertEqual(response.status_code, 302)
+        req = Request.objects.get(requester=self.employee)
+        self.assertEqual(req.attachments.count(), 1)
+        self.assertTrue(req.attachments.first().file.name.endswith(".pdf"))
+
+    def test_wrong_file_type_blocks_entire_submission(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        bad_file = SimpleUploadedFile("virus.exe", b"not allowed", content_type="application/octet-stream")
+        response = self.client.post(
+            f"/new/{self.request_type.id}/",
+            {"action": "submit", "motif": "test", "attachments": [bad_file]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Request.objects.filter(requester=self.employee).exists())
+
+    def test_oversized_attachment_blocks_entire_submission(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        big_file = SimpleUploadedFile(
+            "big.pdf", b"%PDF-1.4 " + b"0" * (6 * 1024 * 1024), content_type="application/pdf"
+        )
+        response = self.client.post(
+            f"/new/{self.request_type.id}/",
+            {"action": "submit", "motif": "test", "attachments": [big_file]},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Request.objects.filter(requester=self.employee).exists())
+
+    def test_draft_attachments_accumulate_across_saves(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.DRAFT,
+        )
+        RequestAttachment.objects.create(request=req, file=self._pdf("first.pdf"), uploaded_by=self.employee)
+
+        response = self.client.post(
+            f"/{req.pk}/edit/",
+            {"action": "draft", "motif": "", "attachments": [self._pdf("second.pdf")]},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(req.attachments.count(), 2)
+
+    def test_attachment_visible_on_request_detail(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.APPROVED,
+        )
+        RequestAttachment.objects.create(request=req, file=self._pdf("preuve.pdf"), uploaded_by=self.employee)
+        response = self.client.get(f"/{req.pk}/")
+        self.assertContains(response, "preuve")
 
 
 class SidebarRoleLabelTests(TestCase):
