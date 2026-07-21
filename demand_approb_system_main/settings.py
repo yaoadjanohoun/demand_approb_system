@@ -203,10 +203,14 @@ STORAGES = {
         'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
     },
 }
-# En dev (DEBUG=True), sert aussi les fichiers directement depuis les apps
-# (STATICFILES_FINDERS) pour ne pas avoir à lancer collectstatic à chaque
-# changement de CSS/JS local.
-WHITENOISE_USE_FINDERS = DEBUG
+# Sert aussi les fichiers directement depuis les apps (STATICFILES_FINDERS)
+# en secours si `collectstatic` n'a pas été lancé ou est incomplet — évite
+# un admin sans CSS. Indépendant de DEBUG (un bug l'y liait auparavant :
+# avec DEBUG=False et staticfiles/ absent ou vide, l'admin s'affichait sans
+# aucun style). Un vrai déploiement IIS peut forcer la valeur stricte via
+# WHITENOISE_USE_FINDERS=False dans web.config, `collectstatic` étant alors
+# garanti par le script de déploiement.
+WHITENOISE_USE_FINDERS = env.bool('WHITENOISE_USE_FINDERS', default=True)
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'approvals:dashboard'

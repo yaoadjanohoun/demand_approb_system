@@ -378,6 +378,8 @@ class WorkflowEngine:
         )
         return request
 
+    #demande resoumise
+    
     def resubmit(self, actor=None):
         request = self.request
         if request.status != Request.Status.RETURNED:
