@@ -20,9 +20,19 @@
                 <tr>
                     <td>{{ req.request_type.name }}</td>
                     <td><span class="status status-{{ req.status }}">{{ req.get_status_display }}</span></td>
-                    <td>{{ req.current_level }}</td>
+                    <td>{% if req.status != "DRAFT" %}{{ req.current_level }}{% else %}—{% endif %}</td>
                     <td>{{ req.submitted_at|default:"—" }}</td>
-                    <td><a href="{% url 'approvals:request_detail' req.pk %}">Voir</a></td>
+                    <td style="display:flex; gap:0.6rem;">
+                        {% if req.status == "DRAFT" %}
+                            <a href="{% url 'approvals:request_edit' req.pk %}">Continuer</a>
+                            <form method="post" action="{% url 'approvals:request_delete' req.pk %}" onsubmit="return confirm('Supprimer ce brouillon ?');">
+                                {% csrf_token %}
+                                <button type="submit" class="link-button">Supprimer</button>
+                            </form>
+                        {% else %}
+                            <a href="{% url 'approvals:request_detail' req.pk %}">Voir</a>
+                        {% endif %}
+                    </td>
                 </tr>
             {% endfor %}
         </table>

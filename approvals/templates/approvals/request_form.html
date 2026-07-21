@@ -8,14 +8,24 @@
         {% else %}
             <a class="back-link" href="{% url 'approvals:dashboard' %}">← Accueil</a>
         {% endif %}
-        <h1>{% if editing %}Corriger et resoumettre{% else %}Nouvelle demande{% endif %} — {{ request_type.name }}</h1>
+        <h1>
+            {% if is_draft %}Continuer le brouillon{% elif editing %}Corriger et resoumettre{% else %}Nouvelle demande{% endif %}
+            — {{ request_type.name }}
+        </h1>
     </div>
 </div>
 <div class="card">
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit" class="btn btn-primary" style="margin-top:1rem;">{% if editing %}Resoumettre{% else %}Soumettre{% endif %}</button>
+        <p style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap;">
+            {% if not editing or is_draft %}
+                <button type="submit" name="action" value="draft" class="btn btn-secondary">Enregistrer comme brouillon</button>
+            {% endif %}
+            <button type="submit" name="action" value="submit" class="btn btn-primary">
+                {% if editing %}Resoumettre{% else %}Soumettre{% endif %}
+            </button>
+        </p>
     </form>
 </div>
 {% endblock %}

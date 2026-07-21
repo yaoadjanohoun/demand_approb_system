@@ -198,6 +198,99 @@ class ProfilePhotoTests(TestCase):
         self.assertFalse(UserProfile.objects.get(user=user).photo)
 
 
+class DraftRequestTests(TestCase):
+    """Flux brouillon (retour client) : une demande peut être enregistrée
+    incomplète, reprise plus tard, puis soumise — et seul un brouillon peut
+    être supprimé (une demande déjà soumise doit rester dans l'historique)."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee1", password="x")
+        self.other_user = User.objects.create_user("employee2", password="x")
+        self.request_type = RequestType.objects.create(
+            name="Note de frais", code="EXPENSE",
+            form_schema={"fields": [
+                {"name": "montant", "type": "decimal", "required": True},
+                {"name": "motif", "type": "text", "required": True},
+            ]},
+        )
+        self.client.login(username="employee1", password="x")
+
+    def test_saving_draft_does_not_require_mandatory_fields(self):
+        response = self.client.post(
+            f"/new/{self.request_type.id}/", {"action": "draft", "montant": "", "motif": ""}
+        )
+        self.assertEqual(response.status_code, 302)
+        req = Request.objects.get(requester=self.employee)
+        self.assertEqual(req.status, Request.Status.DRAFT)
+        self.assertIsNone(req.submitted_at)
+
+    def test_draft_appears_in_my_requests_with_continue_and_delete_links(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.DRAFT,
+        )
+        response = self.client.get("/mine/")
+        self.assertContains(response, "Continuer")
+        self.assertContains(response, "Supprimer")
+        self.assertContains(response, f"/{req.pk}/edit/")
+
+    def test_continuing_a_draft_prefills_the_form(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.DRAFT,
+            data={"montant": "200", "motif": "brouillon initial"},
+        )
+        response = self.client.get(f"/{req.pk}/edit/")
+        self.assertContains(response, "brouillon initial")
+
+    def test_submitting_a_completed_draft_moves_it_to_pending(self):
+        UserProfile.objects.create(user=self.employee, manager=self.other_user)
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={}, approvers_config={"type": "manager"}
+        )
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.DRAFT,
+            data={"montant": "200"},
+        )
+        response = self.client.post(
+            f"/{req.pk}/edit/", {"action": "submit", "montant": "200", "motif": "complet"}
+        )
+        self.assertEqual(response.status_code, 302)
+        req.refresh_from_db()
+        self.assertEqual(req.status, Request.Status.PENDING)
+        self.assertIsNotNone(req.submitted_at)
+
+    def test_deleting_a_draft_removes_it(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.DRAFT,
+        )
+        response = self.client.post(f"/{req.pk}/delete/")
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Request.objects.filter(pk=req.pk).exists())
+
+    def test_cannot_delete_a_submitted_request(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.PENDING,
+        )
+        response = self.client.post(f"/{req.pk}/delete/", follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ne peut plus être supprimée")
+        self.assertTrue(Request.objects.filter(pk=req.pk).exists())
+
+    def test_cannot_delete_someone_elses_draft(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.other_user, status=Request.Status.DRAFT,
+        )
+        response = self.client.post(f"/{req.pk}/delete/")
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Request.objects.filter(pk=req.pk).exists())
+
+    def test_cannot_edit_someone_elses_draft(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.other_user, status=Request.Status.DRAFT,
+        )
+        response = self.client.get(f"/{req.pk}/edit/")
+        self.assertEqual(response.status_code, 403)
+
+
 class LoginRedirectTests(TestCase):
     def test_visiting_login_page_while_authenticated_redirects_to_dashboard(self):
         User.objects.create_user("someone", password="x")

@@ -60,8 +60,22 @@ def request_create(request, type_id):
     request_type = get_object_or_404(RequestType, pk=type_id, is_active=True)
 
     if request.method == "POST":
+        action = request.POST.get("action", "submit")
         form = build_dynamic_form(request_type, data=request.POST)
-        if form.is_valid():
+
+        if action == "draft":
+            for field in form.fields.values():
+                field.required = False
+            if form.is_valid():
+                new_request = Request.objects.create(
+                    request_type=request_type,
+                    requester=request.user,
+                    status=Request.Status.DRAFT,
+                    data=_serialize_form_data(form),
+                )
+                messages.success(request, "Brouillon enregistré.")
+                return redirect("approvals:request_edit", pk=new_request.pk)
+        elif form.is_valid():
             new_request = Request(
                 request_type=request_type,
                 requester=request.user,
@@ -89,37 +103,66 @@ def request_create(request, type_id):
 
 @login_required
 def request_edit(request, pk):
-    """Permet au demandeur de corriger et resoumettre une demande RETOURNÉE."""
+    """Permet au demandeur de continuer un brouillon, ou de corriger et
+    resoumettre une demande RETOURNÉE."""
     req = get_object_or_404(Request, pk=pk)
     if req.requester_id != request.user.id:
         raise PermissionDenied
-    if req.status != Request.Status.RETURNED:
+    if req.status not in (Request.Status.DRAFT, Request.Status.RETURNED):
         messages.error(request, "Cette demande ne peut pas être modifiée dans son état actuel.")
         return redirect("approvals:request_detail", pk=pk)
 
+    is_draft = req.status == Request.Status.DRAFT
+    template_context = {"request_type": req.request_type, "editing": True, "is_draft": is_draft}
+
     if request.method == "POST":
+        action = request.POST.get("action", "submit")
         form = build_dynamic_form(req.request_type, data=request.POST)
-        if form.is_valid():
+
+        if is_draft and action == "draft":
+            for field in form.fields.values():
+                field.required = False
+            if form.is_valid():
+                req.data = _serialize_form_data(form)
+                req.save()
+                messages.success(request, "Brouillon enregistré.")
+                return redirect("approvals:request_edit", pk=pk)
+        elif form.is_valid():
             req.data = _serialize_form_data(form)
             req.save()
             engine = WorkflowEngine(req)
             try:
-                engine.resubmit(actor=request.user)
+                if is_draft:
+                    engine.submit(actor=request.user)
+                else:
+                    engine.resubmit(actor=request.user)
             except RoutingError as exc:
                 messages.error(request, str(exc))
-                return render(
-                    request, "approvals/request_form.html",
-                    {"request_type": req.request_type, "form": form, "editing": True},
-                )
-            messages.success(request, "Demande resoumise avec succès.")
+                return render(request, "approvals/request_form.html", {**template_context, "form": form})
+            messages.success(
+                request, "Demande soumise avec succès." if is_draft else "Demande resoumise avec succès."
+            )
             return redirect("approvals:request_detail", pk=pk)
     else:
         form = build_dynamic_form(req.request_type, initial=req.data)
 
-    return render(
-        request, "approvals/request_form.html",
-        {"request_type": req.request_type, "form": form, "editing": True},
-    )
+    return render(request, "approvals/request_form.html", {**template_context, "form": form})
+
+
+@login_required
+def request_delete(request, pk):
+    """Suppression réservée aux brouillons (une demande soumise doit rester
+    dans l'historique, cf. Manuel d'Administration §6 sur la traçabilité)."""
+    req = get_object_or_404(Request, pk=pk)
+    if req.requester_id != request.user.id:
+        raise PermissionDenied
+    if req.status != Request.Status.DRAFT:
+        messages.error(request, "Cette demande ne peut plus être supprimée (elle n'est plus à l'état brouillon).")
+        return redirect("approvals:request_detail", pk=pk)
+    if request.method == "POST":
+        req.delete()
+        messages.success(request, "Brouillon supprimé.")
+    return redirect("approvals:my_requests")
 
 
 def _serialize_form_data(form):
