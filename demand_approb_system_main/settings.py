@@ -13,30 +13,38 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+import environ
 from django.urls import reverse_lazy
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Toute la configuration sensible (secrets, mots de passe, clés) vient de
+# variables d'environnement, jamais de valeurs écrites en dur dans ce fichier
+# versionné — cf. Les Spécifications Techniques §1.2. En local, ces variables
+# sont chargées depuis un fichier .env (non versionné, voir .gitignore) ;
+# en déploiement IIS, elles viennent des <environmentVariables> de web.config
+# (django-environ lit os.environ dans les deux cas : .env ne fait que le
+# pré-remplir quand il existe, rien à changer entre les deux environnements).
+# Voir .env.example pour la liste des variables et un modèle à copier
+# (`cp .env.example .env`) sur un nouveau poste de développement.
+env = environ.Env()
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
-#
-# En déploiement IIS, ces trois valeurs sont fournies par les variables
-# d'environnement du pool d'applications (<environmentVariables> dans
-# web.config — voir Les Spécifications Techniques §1.2 : la configuration ne
-# doit jamais être écrite en dur dans le code). Les valeurs par défaut
-# ci-dessous ne s'appliquent qu'au poste de développement local.
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY', 'django-insecure-@f3cx=i6r=i3*llg0mx95+=w@x*a1ps%sz1%%qh*9_3q$f!-be'
-)
+# Pas de valeur par défaut ici volontairement : un SECRET_KEY "de secours"
+# écrit dans le code fini presque toujours par se retrouver utilisé quelque
+# part sans que personne ne le change. Absent de .env => échec explicite au
+# démarrage plutôt qu'une clé faible utilisée silencieusement.
+SECRET_KEY = env('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() == 'true'
+DEBUG = env.bool('DJANGO_DEBUG', default=True)
 
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()]
+ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
 
 
 # Application definition
@@ -102,26 +110,26 @@ WSGI_APPLICATION = 'demand_approb_system_main.wsgi.application'
 # Le mot de passe du compte de service (SQLSERVER_PASSWORD) ne doit jamais être
 # écrit en dur, uniquement fourni via l'environnement (cf. §1.2).
 
-SQLSERVER_HOST = os.environ.get('SQLSERVER_HOST', '')
+SQLSERVER_HOST = env('SQLSERVER_HOST', default='')
 
 if SQLSERVER_HOST:
     DATABASES = {
         'default': {
             'ENGINE': 'mssql',
-            'NAME': os.environ.get('SQLSERVER_NAME', 'demand_approb_system'),
+            'NAME': env('SQLSERVER_NAME', default='demand_approb_system'),
             'HOST': SQLSERVER_HOST,
-            'PORT': os.environ.get('SQLSERVER_PORT', '1433'),
-            'USER': os.environ.get('SQLSERVER_USER', ''),
-            'PASSWORD': os.environ.get('SQLSERVER_PASSWORD', ''),
+            'PORT': env('SQLSERVER_PORT', default='1433'),
+            'USER': env('SQLSERVER_USER', default=''),
+            'PASSWORD': env('SQLSERVER_PASSWORD', default=''),
             'OPTIONS': {
-                'driver': os.environ.get('SQLSERVER_ODBC_DRIVER', 'ODBC Driver 18 for SQL Server'),
+                'driver': env('SQLSERVER_ODBC_DRIVER', default='ODBC Driver 18 for SQL Server'),
                 # ODBC Driver 18 vérifie le certificat TLS par défaut ; sur un
                 # premier déploiement sans certificat interne encore déployé,
                 # SQLSERVER_TRUST_CERT=true permet de démarrer quand même
                 # (à désactiver dès que le certificat du serveur est en place).
                 'extra_params': (
                     'TrustServerCertificate=yes;'
-                    if os.environ.get('SQLSERVER_TRUST_CERT', 'true').lower() == 'true'
+                    if env.bool('SQLSERVER_TRUST_CERT', default=True)
                     else ''
                 ),
             },
@@ -172,10 +180,13 @@ USE_TZ = True
 # Email (inscription, confirmation de connexion, réinitialisation de mot de
 # passe). La configuration SMTP réelle (hôte, identifiants) vit en base via
 # EmailSettings, modifiable depuis l'admin sans toucher au code ni redéployer
-# (retour client) — voir approvals/email_backend.py. Sans configuration
-# active, les emails partent sur la console (mode dégradé sûr en dev local).
+# (retour client, cf. approvals/email_backend.py) — pas dans settings.py/.env :
+# c'est précisément ce que ce mécanisme évite. Pour saisir les identifiants
+# Gmail de test, utiliser la page "Configuration email" de l'admin, pas ce
+# fichier. Sans configuration active en base, les emails partent sur la
+# console (mode dégradé sûr en dev local).
 EMAIL_BACKEND = 'approvals.email_backend.DBEmailBackend'
-DEFAULT_FROM_EMAIL = os.environ.get('DJANGO_DEFAULT_FROM_EMAIL', 'noreply@example.local')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@example.local')
 
 
 # Static files (CSS, JavaScript, Images)
@@ -204,7 +215,7 @@ LOGOUT_REDIRECT_URL = 'login'
 # Logs applicatifs : jamais dans C:\Program Files, toujours dans le profil
 # utilisateur du compte de service (Les Spécifications Techniques §1.2 :
 # "Les fichiers de logs... doivent pointer vers %APPDATA%\NomApp\Logs").
-_LOG_DIR = Path(os.environ.get('APPDATA', BASE_DIR)) / 'demand_approb_system_main' / 'Logs'
+_LOG_DIR = Path(env('APPDATA', default=str(BASE_DIR))) / 'demand_approb_system_main' / 'Logs'
 try:
     _LOG_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
@@ -232,7 +243,7 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['console', 'file'],
-            'level': os.environ.get('DJANGO_LOG_LEVEL', 'INFO'),
+            'level': env('DJANGO_LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
         'approvals': {'handlers': ['console', 'file'], 'level': 'INFO', 'propagate': False},
@@ -252,12 +263,12 @@ AUTHENTICATION_BACKENDS = [
 # Toutes les valeurs viennent de variables d'environnement : jamais de secret
 # (mot de passe du compte de service) en dur dans le code source (cf. Spécifications
 # Techniques §1.2). AUTH_LDAP_SERVER_URI vide = backend AD inactif (dev local).
-AUTH_LDAP_SERVER_URI = os.environ.get('AD_LDAP_SERVER_URI', '')
-AUTH_LDAP_BIND_DN = os.environ.get('AD_LDAP_BIND_DN', '')
-AUTH_LDAP_BIND_PASSWORD = os.environ.get('AD_LDAP_BIND_PASSWORD', '')
-AUTH_LDAP_USER_SEARCH_BASE = os.environ.get('AD_LDAP_USER_SEARCH_BASE', '')
-AUTH_LDAP_USER_SEARCH_FILTER = os.environ.get('AD_LDAP_USER_SEARCH_FILTER', '(sAMAccountName={username})')
-AUTH_LDAP_USERNAME_ATTR = os.environ.get('AD_LDAP_USERNAME_ATTR', 'sAMAccountName')
+AUTH_LDAP_SERVER_URI = env('AD_LDAP_SERVER_URI', default='')
+AUTH_LDAP_BIND_DN = env('AD_LDAP_BIND_DN', default='')
+AUTH_LDAP_BIND_PASSWORD = env('AD_LDAP_BIND_PASSWORD', default='')
+AUTH_LDAP_USER_SEARCH_BASE = env('AD_LDAP_USER_SEARCH_BASE', default='')
+AUTH_LDAP_USER_SEARCH_FILTER = env('AD_LDAP_USER_SEARCH_FILTER', default='(sAMAccountName={username})')
+AUTH_LDAP_USERNAME_ATTR = env('AD_LDAP_USERNAME_ATTR', default='sAMAccountName')
 AUTH_LDAP_ATTR_MAP = {
     'first_name': 'givenName',
     'last_name': 'sn',
@@ -268,8 +279,8 @@ AUTH_LDAP_ATTR_MAP = {
 }
 
 UNFOLD = {
-    "SITE_TITLE": "Administration — Demandes et Approbation",
-    "SITE_HEADER": "Demandes et Approbation",
+    "SITE_TITLE": "Demandes et Approbation",
+    "SITE_HEADER": "Demandes et Approbation - Administration",
     "SITE_SYMBOL": "rule",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,

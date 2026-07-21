@@ -3,6 +3,7 @@ attrs==26.1.0
 cffi==2.1.0
 cryptography==49.0.0
 Django==6.0.7
+django-environ==0.14.0
 django-json-widget==2.1.1
 django-unfold==0.101.0
 jsonschema==4.26.0
