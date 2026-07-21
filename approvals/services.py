@@ -10,6 +10,7 @@
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
+from . import notifications
 from .models import ApprovalLog, ApprovalRule, Delegation, Request
 
 
@@ -41,6 +42,7 @@ class WorkflowEngine:
             request.completed_at = timezone.now()
             request.save()
             self._log(actor, ApprovalLog.ActionType.SUBMIT, previous_status, request.status)
+            notifications.notify_auto_approved(request)
             return request
 
         request.status = Request.Status.PENDING
@@ -50,6 +52,7 @@ class WorkflowEngine:
         request.save()
         self._log(actor, ApprovalLog.ActionType.SUBMIT, previous_status, request.status)
         self._activate_level(request.current_level)
+        notifications.notify_submission(request)
         return request
 
     def _build_snapshot(self):
@@ -262,6 +265,7 @@ class WorkflowEngine:
                 context={"level": request.current_level - 1},
             )
             self._activate_level(request.current_level)
+            notifications.notify_level_activated(request)
         else:
             request.status = Request.Status.APPROVED
             request.completed_at = timezone.now()
@@ -270,6 +274,7 @@ class WorkflowEngine:
                 actor, ApprovalLog.ActionType.APPROVE, previous_status, request.status,
                 context={"level": request.current_level},
             )
+            notifications.notify_decision(request, "approuvée")
         return request
 
     #demande rejetée
@@ -290,6 +295,7 @@ class WorkflowEngine:
         request.completed_at = timezone.now()
         request.save()
         self._log(actor, ApprovalLog.ActionType.REJECT, previous_status, request.status, comment=comment)
+        notifications.notify_decision(request, "refusée", comment)
         return request
 
 #demande retourée
@@ -309,6 +315,7 @@ class WorkflowEngine:
         request.status = Request.Status.RETURNED
         request.save()
         self._log(actor, ApprovalLog.ActionType.RETURN, previous_status, request.status, comment=comment)
+        notifications.notify_decision(request, "retournée pour information", comment)
         return request
 
     # ------------------------------------------------------------------
@@ -339,6 +346,7 @@ class WorkflowEngine:
                 comment=comment, context={"level": request.current_level - 1},
             )
             self._activate_level(request.current_level)
+            notifications.notify_level_activated(request)
         else:
             request.status = Request.Status.APPROVED
             request.completed_at = timezone.now()
@@ -347,6 +355,7 @@ class WorkflowEngine:
                 actor, ApprovalLog.ActionType.FORCE_ADVANCE, previous_status, request.status,
                 comment=comment, context={"level": request.current_level},
             )
+            notifications.notify_decision(request, "approuvée")
         return request
 
     #reassignation manuelle de la demande
@@ -376,6 +385,7 @@ class WorkflowEngine:
                 "new_approver_ids": list(new_approver_ids),
             },
         )
+        notifications.notify_level_activated(request)
         return request
 
     #demande resoumise
@@ -402,6 +412,7 @@ class WorkflowEngine:
                 self._activate_level(request.current_level)
 
         self._log(actor, ApprovalLog.ActionType.SUBMIT, previous_status, request.status)
+        notifications.notify_level_activated(request)
         return request
 
     # ------------------------------------------------------------------
