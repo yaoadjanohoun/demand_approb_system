@@ -291,6 +291,58 @@ class DraftRequestTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+class SidebarRoleLabelTests(TestCase):
+    """La sidebar affichait 'Utilisateur' pour tout le monde (retour client) :
+    doit maintenant afficher le rôle réel (Manager pour qui a des rapports
+    directs, Demandeur sinon)."""
+
+    def test_manager_sees_manager_label(self):
+        manager = User.objects.create_user("manager1", password="x")
+        employee = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=employee, manager=manager)
+        self.client.login(username="manager1", password="x")
+        response = self.client.get("/")
+        self.assertContains(response, "Manager")
+
+    def test_plain_employee_sees_demandeur_label(self):
+        User.objects.create_user("employee1", password="x")
+        self.client.login(username="employee1", password="x")
+        response = self.client.get("/")
+        self.assertContains(response, "Demandeur")
+        self.assertNotContains(response, "Utilisateur")
+
+
+class LoginErrorStylingTests(TestCase):
+    def test_invalid_login_error_uses_styled_errorlist(self):
+        User.objects.create_user("employee1", password="x")
+        response = self.client.post("/login/", {"username": "employee1", "password": "wrong"})
+        self.assertContains(response, 'class="errorlist')
+
+
+class MyRequestsSubmitButtonTests(TestCase):
+    """Le bouton "Soumettre une demande" doit toujours être visible (pas
+    seulement quand la liste est vide) et pointer directement vers le
+    formulaire du type filtré, plutôt que vers l'accueil (retour client)."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee1", password="x")
+        self.request_type = RequestType.objects.create(
+            name="Congés", code="LEAVE", is_active=True, form_schema={"fields": []},
+        )
+        Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.DRAFT,
+        )
+        self.client.login(username="employee1", password="x")
+
+    def test_filtered_view_links_directly_to_that_types_create_form(self):
+        response = self.client.get(f"/mine/?type={self.request_type.code}")
+        self.assertContains(response, f"/new/{self.request_type.id}/")
+
+    def test_unfiltered_view_links_to_dashboard(self):
+        response = self.client.get("/mine/")
+        self.assertContains(response, 'href="/"')
+
+
 class LoginRedirectTests(TestCase):
     def test_visiting_login_page_while_authenticated_redirects_to_dashboard(self):
         User.objects.create_user("someone", password="x")

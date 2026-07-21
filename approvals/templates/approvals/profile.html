@@ -19,7 +19,7 @@
         </div>
         <div>
             <div style="font-weight:600; font-size:1.05rem;">{{ user.get_full_name|default:user.username }}</div>
-            <div class="card-note" style="margin-top:0.15rem;">{% if user.is_superuser %}Super admin{% elif user.is_staff %}Admin fonctionnel{% else %}Utilisateur{% endif %}</div>
+            <div class="card-note" style="margin-top:0.15rem;">{{ nav_role_label }}</div>
         </div>
     </div>
 

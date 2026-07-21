@@ -1,7 +1,14 @@
 {% extends "approvals/base.html" %}
 {% block title %}Mes demandes{% endblock %}
 {% block content %}
-<h1>Mes demandes</h1>
+<div class="page-head">
+    <h1>Mes demandes</h1>
+    {% if active_request_type %}
+        <a class="btn btn-primary" href="{% url 'approvals:request_create' active_request_type.id %}">Soumettre une demande</a>
+    {% else %}
+        <a class="btn btn-primary" href="{% url 'approvals:dashboard' %}">Soumettre une demande</a>
+    {% endif %}
+</div>
 
 {% if nav_request_types %}
 <div class="filter-pills">
@@ -22,15 +29,15 @@
                     <td><span class="status status-{{ req.status }}">{{ req.get_status_display }}</span></td>
                     <td>{% if req.status != "DRAFT" %}{{ req.current_level }}{% else %}—{% endif %}</td>
                     <td>{{ req.submitted_at|default:"—" }}</td>
-                    <td style="display:flex; gap:0.6rem;">
+                    <td style="display:flex; gap:0.5rem;">
                         {% if req.status == "DRAFT" %}
-                            <a href="{% url 'approvals:request_edit' req.pk %}">Continuer</a>
-                            <form method="post" action="{% url 'approvals:request_delete' req.pk %}" onsubmit="return confirm('Supprimer ce brouillon ?');">
+                            <a class="btn btn-secondary btn-sm" href="{% url 'approvals:request_edit' req.pk %}">Continuer</a>
+                            <form method="post" action="{% url 'approvals:request_delete' req.pk %}" data-confirm="Supprimer ce brouillon ? Cette action est irréversible.">
                                 {% csrf_token %}
-                                <button type="submit" class="link-button">Supprimer</button>
+                                <button type="submit" class="btn btn-reject btn-sm">Supprimer</button>
                             </form>
                         {% else %}
-                            <a href="{% url 'approvals:request_detail' req.pk %}">Voir</a>
+                            <a class="btn btn-secondary btn-sm" href="{% url 'approvals:request_detail' req.pk %}">Voir</a>
                         {% endif %}
                     </td>
                 </tr>
@@ -39,7 +46,6 @@
     {% else %}
         <div class="empty-state">
             <p>{% if active_type %}Aucune demande de ce type pour le moment.{% else %}Tu n'as encore soumis aucune demande.{% endif %}</p>
-            <a class="btn btn-primary" href="{% url 'approvals:dashboard' %}">Soumettre une demande</a>
         </div>
     {% endif %}
 </div>

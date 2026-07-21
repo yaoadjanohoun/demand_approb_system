@@ -87,7 +87,23 @@ h3 { font-size: 1rem; color: var(--text-muted); text-transform: uppercase; lette
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 0.95rem; flex-shrink: 0;
 }
-.sidebar-brand .name { font-weight: 600; font-size: 0.95rem; line-height: 1.2; }
+.sidebar-brand .name { font-weight: 600; font-size: 0.95rem; line-height: 1.2; flex: 1; }
+.sidebar-toggle {
+  background: none; border: none; cursor: pointer; padding: 0.3rem;
+  color: var(--text-muted); border-radius: var(--radius-sm); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 1rem; line-height: 1;
+}
+.sidebar-toggle:hover { background: var(--surface-muted); color: var(--text); }
+
+.app-shell.sidebar-collapsed .sidebar { width: 68px; padding-left: 0.5rem; padding-right: 0.5rem; }
+.app-shell.sidebar-collapsed .sidebar-brand .name,
+.app-shell.sidebar-collapsed .sidebar-user,
+.app-shell.sidebar-collapsed .nav-group,
+.app-shell.sidebar-collapsed .sidebar-footer .label {
+  display: none;
+}
+.app-shell.sidebar-collapsed .sidebar-brand { justify-content: center; padding-left: 0; padding-right: 0; border-bottom: none; }
+.app-shell.sidebar-collapsed .sidebar-footer button { justify-content: center; padding: 0.55rem; }
 
 .sidebar-user {
   display: flex; align-items: center; gap: 0.6rem;
@@ -214,11 +230,6 @@ tr:last-child td { border-bottom: none; }
 .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 
-.link-button {
-  background: none; border: none; padding: 0; cursor: pointer;
-  color: var(--danger); font-size: inherit; text-decoration: underline;
-}
-
 /* ---------- Forms ---------- */
 
 label { display: block; margin-top: 0.85rem; margin-bottom: 0.3rem; font-weight: 600; font-size: 0.85rem; }
@@ -230,6 +241,28 @@ input:focus, textarea:focus, select:focus { outline: 2px solid var(--accent-soft
 .checkbox-row { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.6rem; }
 .checkbox-row input { width: auto; }
 .checkbox-row label { margin: 0; font-weight: 400; }
+
+ul.errorlist {
+  list-style: none; margin: 0 0 1rem; padding: 0.65rem 0.9rem;
+  background: var(--danger-soft); color: var(--danger); border-radius: var(--radius-sm);
+  font-size: 0.86rem; font-weight: 600;
+}
+ul.errorlist li + li { margin-top: 0.3rem; }
+ul.errorlist ul.errorlist { margin: 0.3rem 0 0; padding: 0; background: none; }
+
+/* ---------- Modale de confirmation ---------- */
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(20, 22, 30, 0.45);
+  display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem;
+}
+.modal-overlay.hidden { display: none; }
+.modal-box {
+  background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-md);
+  padding: 1.5rem; max-width: 380px; width: 100%;
+}
+.modal-box p { margin: 0 0 1.25rem; font-size: 0.92rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
 
 /* ---------- Messages / toasts ---------- */
 

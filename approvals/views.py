@@ -188,11 +188,13 @@ def _pending_requests_for_user(user):
 def my_requests(request):
     requests = Request.objects.filter(requester=request.user).select_related("request_type")
     type_code = request.GET.get("type")
+    active_request_type = None
     if type_code:
         requests = requests.filter(request_type__code=type_code)
+        active_request_type = RequestType.objects.filter(code=type_code).first()
     return render(
         request, "approvals/my_requests.html",
-        {"requests": requests, "active_type": type_code},
+        {"requests": requests, "active_type": type_code, "active_request_type": active_request_type},
     )
 
 

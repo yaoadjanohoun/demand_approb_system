@@ -22,4 +22,15 @@ def sidebar(request):
         "nav_request_types": request_types,
         "nav_pending_count": pending_count,
         "nav_photo_url": photo_url,
+        "nav_role_label": _role_label(request.user),
     }
+
+
+def _role_label(user):
+    if user.is_superuser:
+        return "Super admin"
+    if user.is_staff:
+        return "Admin fonctionnel"
+    if user.direct_reports.exists():
+        return "Manager"
+    return "Demandeur"
