@@ -2,6 +2,16 @@
 {% block title %}À approuver{% endblock %}
 {% block content %}
 <h1>Demandes à approuver</h1>
+
+{% if nav_request_types %}
+<div class="filter-pills">
+    <a class="filter-pill{% if not active_type %} active{% endif %}" href="{% url 'approvals:pending_approvals' %}">Toutes</a>
+    {% for rt in nav_request_types %}
+        <a class="filter-pill{% if active_type == rt.code %} active{% endif %}" href="{% url 'approvals:pending_approvals' %}?type={{ rt.code }}">{{ rt.name }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+
 <div class="card">
     {% if requests %}
         <table>
@@ -17,7 +27,9 @@
             {% endfor %}
         </table>
     {% else %}
-        <p>Aucune demande en attente de ton approbation.</p>
+        <div class="empty-state">
+            <p>Aucune demande en attente de ton approbation.</p>
+        </div>
     {% endif %}
 </div>
 {% endblock %}

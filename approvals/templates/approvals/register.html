@@ -1,17 +1,28 @@
 {% extends "approvals/base.html" %}
 {% block title %}Inscription{% endblock %}
-{% block content %}
-<div class="card" style="max-width: 420px; margin: 0 auto;">
+{% block guest_content %}
+<div class="card">
     <h1>Créer un compte</h1>
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit" class="btn btn-primary" style="margin-top:1rem;">S'inscrire</button>
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem; width:100%; justify-content:center;">S'inscrire</button>
     </form>
-    <p style="margin-top:1rem; font-size:0.9rem; color:#6b7280;">
-        Après inscription, un email de confirmation te sera envoyé. Une fois ton adresse
-        confirmée, un administrateur devra encore activer ton compte avant que tu puisses
+    <p class="card-note">
+        Après inscription, un email de confirmation vous sera envoyé. Une fois votre adresse
+        confirmée, un administrateur devra encore activer votre compte avant que tu puisses
         te connecter.
     </p>
+    <hr>
+    <p class="card-note" style="text-align:center;">
+        <a href="{% url 'password_reset' %}">
+            Mot de passe oublié ?
+        </a>
+        · 
+        <a style="margin-top:1rem; width:100%; justify-content:center;" href="{% url 'login' %}">
+            Retour à la connexion
+        </a>
+    </p>
+
 </div>
 {% endblock %}

@@ -1,8 +1,13 @@
 {% extends "approvals/base.html" %}
 {% block title %}Rapports{% endblock %}
 {% block content %}
-<h1>Rapports et statistiques</h1>
-<p><a class="btn btn-primary" href="{% url 'approvals:reports_export' %}">Exporter les demandes (CSV)</a></p>
+<div class="page-head">
+    <div>
+        <a class="back-link" href="{% url 'approvals:dashboard' %}">← Accueil</a>
+        <h1>Rapports et statistiques</h1>
+    </div>
+    <a class="btn btn-primary" href="{% url 'approvals:reports_export' %}">Exporter les demandes (CSV)</a>
+</div>
 
 <div class="card">
     <h3>Volume de demandes par mois</h3>

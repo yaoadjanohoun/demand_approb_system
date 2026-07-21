@@ -1,0 +1,39 @@
+{% extends "approvals/base.html" %}
+{% block title %}Mon profil{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <a class="back-link" href="{% url 'approvals:dashboard' %}">← Accueil</a>
+        <h1>Mon profil</h1>
+    </div>
+</div>
+
+<div class="card">
+    <div class="profile-header">
+        <div class="profile-avatar">{{ user.username|slice:":2"|upper }}</div>
+        <div>
+            <div style="font-weight:600; font-size:1.05rem;">{{ user.get_full_name|default:user.username }}</div>
+            <div class="card-note" style="margin-top:0.15rem;">{% if user.is_superuser %}Super admin{% elif user.is_staff %}Admin fonctionnel{% else %}Utilisateur{% endif %}</div>
+        </div>
+    </div>
+
+    <table>
+        <tr><th>Nom d'utilisateur</th><td>{{ user.username }}</td></tr>
+        <tr><th>Nom complet</th><td>{{ user.get_full_name|default:"—" }}</td></tr>
+        <tr><th>Email</th><td>{{ user.email|default:"—" }}</td></tr>
+        <tr><th>Manager</th><td>{{ manager_display }}</td></tr>
+        <tr><th>Département</th><td>{{ profile.department_name|default:profile.department_id|default:"—" }}</td></tr>
+        <tr><th>Site</th><td>{{ profile.site_name|default:profile.site_id|default:"—" }}</td></tr>
+    </table>
+    <p class="card-note">
+        Ces informations proviennent de l'annuaire de l'entreprise (Active Directory) ou ont été
+        configurées par un admin fonctionnel. Pour les corriger, contacte un administrateur.
+    </p>
+</div>
+
+<div class="card">
+    <div class="card-title">Sécurité</div>
+    <p style="margin:0 0 0.75rem;">Changer ton mot de passe :</p>
+    <a class="btn btn-secondary" href="{% url 'password_reset' %}">Réinitialiser mon mot de passe</a>
+</div>
+{% endblock %}

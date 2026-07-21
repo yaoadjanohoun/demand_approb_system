@@ -92,3 +92,44 @@ class ApproverCanStillViewAfterActingTests(TestCase):
         self.client.login(username="director1", password="x")
         response = self.client.get(f"/{req.pk}/")
         self.assertEqual(response.status_code, 200)
+
+
+class ProfilePageTests(TestCase):
+    """Bug en revue client : /profil/ renvoyait un 500 pour tout utilisateur
+    sans manager assigné (director1, director1_delegate, admin dans le jeu de
+    données UAT). Cause : {{ profile.manager.get_full_name|default:profile.manager.username }}
+    dans le template -- accéder à un attribut d'un objet None DANS L'ARGUMENT
+    D'UN FILTRE lève VariableDoesNotExist au lieu de s'effacer silencieusement
+    (contrairement à {{ profile.manager.username }} seul, qui s'affiche vide).
+    """
+
+    def test_profile_page_works_without_manager(self):
+        user = User.objects.create_user("no_manager_user", password="x")
+        self.client.login(username="no_manager_user", password="x")
+        response = self.client.get("/profil/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "no_manager_user")
+
+    def test_profile_page_works_with_manager(self):
+        manager = User.objects.create_user("manager1", password="x", first_name="Marc", last_name="Manager")
+        employee = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=employee, manager=manager)
+        self.client.login(username="employee1", password="x")
+        response = self.client.get("/profil/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Marc Manager")
+
+    def test_profile_page_creates_profile_if_missing(self):
+        User.objects.create_user("brand_new_user", password="x")
+        self.client.login(username="brand_new_user", password="x")
+        response = self.client.get("/profil/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(UserProfile.objects.filter(user__username="brand_new_user").exists())
+
+
+class LoginRedirectTests(TestCase):
+    def test_visiting_login_page_while_authenticated_redirects_to_dashboard(self):
+        User.objects.create_user("someone", password="x")
+        self.client.login(username="someone", password="x")
+        response = self.client.get("/login/")
+        self.assertRedirects(response, "/")

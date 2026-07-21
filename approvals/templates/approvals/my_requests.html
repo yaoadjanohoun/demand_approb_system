@@ -2,6 +2,16 @@
 {% block title %}Mes demandes{% endblock %}
 {% block content %}
 <h1>Mes demandes</h1>
+
+{% if nav_request_types %}
+<div class="filter-pills">
+    <a class="filter-pill{% if not active_type %} active{% endif %}" href="{% url 'approvals:my_requests' %}">Toutes</a>
+    {% for rt in nav_request_types %}
+        <a class="filter-pill{% if active_type == rt.code %} active{% endif %}" href="{% url 'approvals:my_requests' %}?type={{ rt.code }}">{{ rt.name }}</a>
+    {% endfor %}
+</div>
+{% endif %}
+
 <div class="card">
     {% if requests %}
         <table>
@@ -17,7 +27,10 @@
             {% endfor %}
         </table>
     {% else %}
-        <p>Tu n'as encore soumis aucune demande.</p>
+        <div class="empty-state">
+            <p>{% if active_type %}Aucune demande de ce type pour le moment.{% else %}Tu n'as encore soumis aucune demande.{% endif %}</p>
+            <a class="btn btn-primary" href="{% url 'approvals:dashboard' %}">Soumettre une demande</a>
+        </div>
     {% endif %}
 </div>
 {% endblock %}

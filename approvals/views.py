@@ -3,17 +3,39 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from . import reports as reports_module
 from .forms import build_dynamic_form, labeled_data
-from .models import Request, RequestType
+from .models import Request, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
 
 
 @login_required
 def dashboard(request):
-    request_types = RequestType.objects.filter(is_active=True)
-    return render(request, "approvals/dashboard.html", {"request_types": request_types})
+    request_types = RequestType.objects.filter(is_active=True).order_by("name")
+    my_requests_qs = Request.objects.filter(requester=request.user)
+    stats = {
+        "my_pending": my_requests_qs.filter(status=Request.Status.PENDING).count(),
+        "my_total": my_requests_qs.count(),
+        "to_approve": len(_pending_requests_for_user(request.user)),
+    }
+    return render(
+        request, "approvals/dashboard.html",
+        {"request_types": request_types, "stats": stats},
+    )
+
+
+@login_required
+def profile(request):
+    user_profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    manager_display = "—"
+    if user_profile.manager:
+        manager_display = user_profile.manager.get_full_name() or user_profile.manager.username
+    return render(
+        request, "approvals/profile.html",
+        {"profile": user_profile, "manager_display": manager_display},
+    )
 
 
 @login_required
@@ -97,20 +119,33 @@ def _serialize_form_data(form):
     return data
 
 
+def _pending_requests_for_user(user):
+    candidates = Request.objects.filter(status=Request.Status.PENDING).select_related("request_type", "requester")
+    return [req for req in candidates if user.id in WorkflowEngine(req).get_effective_approvers()]
+
+
 @login_required
 def my_requests(request):
-    requests = Request.objects.filter(requester=request.user)
-    return render(request, "approvals/my_requests.html", {"requests": requests})
+    requests = Request.objects.filter(requester=request.user).select_related("request_type")
+    type_code = request.GET.get("type")
+    if type_code:
+        requests = requests.filter(request_type__code=type_code)
+    return render(
+        request, "approvals/my_requests.html",
+        {"requests": requests, "active_type": type_code},
+    )
 
 
 @login_required
 def pending_approvals(request):
-    candidates = Request.objects.filter(status=Request.Status.PENDING)
-    pending = [
-        req for req in candidates
-        if request.user.id in WorkflowEngine(req).get_effective_approvers()
-    ]
-    return render(request, "approvals/pending_list.html", {"requests": pending})
+    pending = _pending_requests_for_user(request.user)
+    type_code = request.GET.get("type")
+    if type_code:
+        pending = [req for req in pending if req.request_type.code == type_code]
+    return render(
+        request, "approvals/pending_list.html",
+        {"requests": pending, "active_type": type_code},
+    )
 
 
 def _can_view(user, req):
@@ -129,6 +164,13 @@ def request_detail(request, pk):
         req.status == Request.Status.PENDING
         and request.user.id in WorkflowEngine(req).get_effective_approvers()
     )
+    is_requester = req.requester_id == request.user.id
+    if is_requester:
+        back_url = reverse("approvals:my_requests")
+        back_label = "Mes demandes"
+    else:
+        back_url = reverse("approvals:pending_approvals")
+        back_label = "À approuver"
     return render(
         request, "approvals/request_detail.html",
         {
@@ -136,7 +178,9 @@ def request_detail(request, pk):
             "data_rows": labeled_data(req.request_type, req.data),
             "logs": req.logs.select_related("actor"),
             "is_current_approver": is_current_approver,
-            "is_requester": req.requester_id == request.user.id,
+            "is_requester": is_requester,
+            "back_url": back_url,
+            "back_label": back_label,
         },
     )
 

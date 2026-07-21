@@ -25,7 +25,8 @@ class PasswordResetTemplateTests(TestCase):
 
     def test_password_reset_done_uses_app_template(self):
         response = self.client.get("/mot-de-passe/reinitialiser/envoye/")
-        self.assertContains(response, "Vérifie ta boîte email")
+        self.assertNotContains(response, "Site d’administration de Django")
+        self.assertContains(response, "Retour à la connexion")
 
 
 class RegistrationFlowTests(TestCase):
@@ -155,7 +156,7 @@ class LoginConfirmationTests(TestCase):
             require_login_confirmation=True,
         )
         response = self.client.post("/login/", {"username": "employee1", "password": "secret1234"})
-        self.assertContains(response, "Confirme ta connexion")
+        self.assertContains(response, self.user.email)
         self.assertFalse(response.wsgi_request.user.is_authenticated)
         self.assertEqual(len(mail.outbox), 1)
 

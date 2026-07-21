@@ -1,12 +1,21 @@
 {% extends "approvals/base.html" %}
 {% block title %}{{ request_type.name }}{% endblock %}
 {% block content %}
-<h1>{% if editing %}Corriger et resoumettre{% else %}Nouvelle demande{% endif %} — {{ request_type.name }}</h1>
+<div class="page-head">
+    <div>
+        {% if editing %}
+            <a class="back-link" href="{% url 'approvals:my_requests' %}">← Mes demandes</a>
+        {% else %}
+            <a class="back-link" href="{% url 'approvals:dashboard' %}">← Accueil</a>
+        {% endif %}
+        <h1>{% if editing %}Corriger et resoumettre{% else %}Nouvelle demande{% endif %} — {{ request_type.name }}</h1>
+    </div>
+</div>
 <div class="card">
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <button type="submit" class="btn btn-primary">{% if editing %}Resoumettre{% else %}Soumettre{% endif %}</button>
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem;">{% if editing %}Resoumettre{% else %}Soumettre{% endif %}</button>
     </form>
 </div>
 {% endblock %}

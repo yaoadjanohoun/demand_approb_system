@@ -9,6 +9,7 @@ urlpatterns = [
     path("inscription/", auth_views.register, name="register"),
     path("confirmer-email/<str:token>/", auth_views.confirm_email, name="confirm_email"),
     path("connexion/confirmer/<str:token>/", auth_views.confirm_login, name="confirm_login"),
+    path("profil/", views.profile, name="profile"),
     path("mine/", views.my_requests, name="my_requests"),
     path("pending/", views.pending_approvals, name="pending_approvals"),
     path("rapports/", views.reports, name="reports"),

@@ -1,11 +1,11 @@
 {% extends "approvals/base.html" %}
 {% block title %}Inscription en attente{% endblock %}
-{% block content %}
-<div class="card" style="max-width: 420px; margin: 0 auto;">
+{% block guest_content %}
+<div class="card">
     <h1>Vérifie ta boîte email</h1>
-    <p>Un email de confirmation a été envoyé à <strong>{{ email }}</strong>.</p>
-    <p>Clique sur le lien qu'il contient pour confirmer ton adresse. Un administrateur devra
-        ensuite activer ton compte avant que tu puisses te connecter.</p>
+    <p>Un email de confirmation vous a été envoyé à <strong>{{ email }}</strong>.</p>
+    <p>Cliquez sur le lien qu'il contient pour confirmer votre adresse. Un administrateur devra
+        ensuite activer votre compte avant que tu puisses te connecter.</p>
     <p><a href="{% url 'login' %}">Retour à la connexion</a></p>
 </div>
 {% endblock %}

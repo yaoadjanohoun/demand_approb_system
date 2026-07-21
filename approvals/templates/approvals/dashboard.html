@@ -1,21 +1,43 @@
 {% extends "approvals/base.html" %}
 {% block title %}Accueil{% endblock %}
 {% block content %}
-<h1>Nouvelle demande</h1>
-<div class="card">
-    {% if request_types %}
-        <table>
-            {% for rt in request_types %}
-                <tr>
-                    <td>{{ rt.name }}</td>
-                    <td style="text-align:right;">
-                        <a class="btn btn-primary" href="{% url 'approvals:request_create' rt.id %}">Soumettre</a>
-                    </td>
-                </tr>
-            {% endfor %}
-        </table>
-    {% else %}
-        <p>Aucun type de demande actif pour le moment. Un administrateur fonctionnel doit en créer un.</p>
-    {% endif %}
+<div class="page-head">
+    <div>
+        <h1>Bonjour {{ user.first_name|default:user.username }}</h1>
+        <p class="card-note" style="margin-top:0;">Choisis une action ci-dessous ou consulte tes demandes dans la barre latérale.</p>
+    </div>
 </div>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="num">{{ stats.my_total }}</div>
+        <div class="label">Mes demandes (total)</div>
+    </div>
+    <div class="stat-card">
+        <div class="num">{{ stats.my_pending }}</div>
+        <div class="label">Mes demandes en attente</div>
+    </div>
+    <div class="stat-card">
+        <div class="num">{{ stats.to_approve }}</div>
+        <div class="label">À approuver</div>
+    </div>
+</div>
+
+<h2>Nouvelle demande</h2>
+{% if request_types %}
+    <div class="card-grid">
+        {% for rt in request_types %}
+            <a class="type-card" href="{% url 'approvals:request_create' rt.id %}" style="text-decoration:none; color:inherit;">
+                <div class="icon">{{ rt.name|slice:":1"|upper }}</div>
+                <div class="label">{{ rt.name }}</div>
+                <div class="desc">{{ rt.form_schema.fields|length }} champ{{ rt.form_schema.fields|length|pluralize }} à remplir</div>
+                <span class="btn btn-primary btn-sm" style="align-self:flex-start;">Soumettre</span>
+            </a>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="card">
+        <p style="margin:0;">Aucun type de demande actif pour le moment. Un administrateur fonctionnel doit en créer un.</p>
+    </div>
+{% endif %}
 {% endblock %}

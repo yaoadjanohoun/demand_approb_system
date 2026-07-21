@@ -1,18 +1,18 @@
 {% extends "approvals/base.html" %}
 {% block title %}Connexion{% endblock %}
-{% block content %}
-<div class="card" style="max-width: 360px; margin: 0 auto;">
+{% block guest_content %}
+<div class="card">
     <h1>Connexion</h1>
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
-        <label style="display:flex; align-items:center; gap:0.4rem; font-weight:400; margin-top:-0.5rem;">
-            <input type="checkbox" id="toggle-password" style="width:auto; margin:0;">
-            Afficher le mot de passe
-        </label>
-        <button type="submit" class="btn btn-primary" style="margin-top:1rem;">Se connecter</button>
+        <div class="checkbox-row">
+            <input type="checkbox" id="toggle-password">
+            <label for="toggle-password">Afficher le mot de passe</label>
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem; width:100%; justify-content:center;">Se connecter</button>
     </form>
-    <p style="margin-top:1rem; font-size:0.9rem;">
+    <p class="card-note" style="text-align:center;">
         <a href="{% url 'password_reset' %}">Mot de passe oublié ?</a>
         · <a href="{% url 'approvals:register' %}">Créer un compte</a>
     </p>
