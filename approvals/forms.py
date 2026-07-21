@@ -3,6 +3,15 @@ import datetime
 
 from django import forms
 
+from .models import UserProfile
+
+
+class ProfilePhotoForm(forms.ModelForm):
+    class Meta:
+        model = UserProfile
+        fields = ["photo"]
+
+
 FIELD_BUILDERS = {
     "text": lambda: forms.CharField(widget=forms.Textarea(attrs={"rows": 3})),
     "number": lambda: forms.IntegerField(),

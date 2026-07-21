@@ -196,6 +196,11 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreply@example.local')
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'  # peuplé par `manage.py collectstatic` au déploiement
 
+# Fichiers utilisateur (ex: photo de profil) : stockés sur disque, jamais en base
+# (le modèle ne garde que le chemin du fichier via ImageField).
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',

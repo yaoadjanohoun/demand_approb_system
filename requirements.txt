@@ -12,6 +12,7 @@ ldap3==2.9.1
 mssql-django==1.7.3
 pyasn1==0.6.4
 pycparser==3.0
+Pillow==12.3.0
 pyodbc==5.3.0
 pytz==2026.2
 referencing==0.37.0

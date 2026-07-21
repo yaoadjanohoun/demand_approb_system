@@ -17,7 +17,13 @@
         </div>
 
         <div class="sidebar-user">
-            <div class="avatar">{{ user.username|slice:":2"|upper }}</div>
+            <div class="avatar">
+                {% if nav_photo_url %}
+                    <img src="{{ nav_photo_url }}" alt="">
+                {% else %}
+                    {{ user.username|slice:":2"|upper }}
+                {% endif %}
+            </div>
             <div class="who">
                 <div class="name">{{ user.get_full_name|default:user.username }}</div>
                 <div class="role">{% if user.is_superuser %}Super admin{% elif user.is_staff %}Admin fonctionnel{% else %}Utilisateur{% endif %}</div>

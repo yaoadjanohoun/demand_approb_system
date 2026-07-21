@@ -10,7 +10,13 @@
 
 <div class="card">
     <div class="profile-header">
-        <div class="profile-avatar">{{ user.username|slice:":2"|upper }}</div>
+        <div class="profile-avatar">
+            {% if profile.photo %}
+                <img src="{{ profile.photo.url }}" alt="">
+            {% else %}
+                {{ user.username|slice:":2"|upper }}
+            {% endif %}
+        </div>
         <div>
             <div style="font-weight:600; font-size:1.05rem;">{{ user.get_full_name|default:user.username }}</div>
             <div class="card-note" style="margin-top:0.15rem;">{% if user.is_superuser %}Super admin{% elif user.is_staff %}Admin fonctionnel{% else %}Utilisateur{% endif %}</div>
@@ -29,6 +35,22 @@
         Ces informations proviennent de l'annuaire de l'entreprise (Active Directory) ou ont été
         configurées par un admin fonctionnel. Pour les corriger, contacte un administrateur.
     </p>
+</div>
+
+<div class="card">
+    <div class="card-title">Photo de profil</div>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        {{ photo_form.as_p }}
+        <button type="submit" class="btn btn-primary" style="margin-top:0.5rem;">Enregistrer la photo</button>
+    </form>
+    {% if profile.photo %}
+        <form method="post" style="margin-top:0.5rem;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="remove_photo">
+            <button type="submit" class="btn btn-secondary">Supprimer la photo</button>
+        </form>
+    {% endif %}
 </div>
 
 <div class="card">

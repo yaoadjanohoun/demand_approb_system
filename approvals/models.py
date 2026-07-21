@@ -3,6 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import FileExtensionValidator
 from django.db import models
 
 from . import crypto
@@ -15,6 +16,14 @@ from .validators import (
 
 def _generate_token():
     return secrets.token_urlsafe(32)
+
+
+PROFILE_PHOTO_MAX_SIZE_MB = 2
+
+
+def validate_profile_photo_size(file):
+    if file.size > PROFILE_PHOTO_MAX_SIZE_MB * 1024 * 1024:
+        raise ValidationError(f"La photo ne doit pas dépasser {PROFILE_PHOTO_MAX_SIZE_MB} Mo.")
 
 
 class UserProfile(models.Model):
@@ -55,6 +64,13 @@ class UserProfile(models.Model):
     # compte (et l'assignation d'un rôle/manager/département) reste une
     # action distincte réservée à un admin fonctionnel.
     email_confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    # Stockée sur disque (MEDIA_ROOT) : la base ne garde que le chemin du fichier.
+    photo = models.ImageField(
+        upload_to="profile_photos/", null=True, blank=True,
+        validators=[FileExtensionValidator(["jpg", "jpeg", "png"]), validate_profile_photo_size],
+        help_text="JPG ou PNG, 2 Mo maximum.",
+    )
 
     def __str__(self):
         return f"Profil de {self.user}"

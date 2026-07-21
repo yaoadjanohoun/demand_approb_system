@@ -6,7 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from . import reports as reports_module
-from .forms import build_dynamic_form, labeled_data
+from .forms import ProfilePhotoForm, build_dynamic_form, labeled_data
 from .models import Request, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
 
@@ -29,12 +29,29 @@ def dashboard(request):
 @login_required
 def profile(request):
     user_profile, _ = UserProfile.objects.get_or_create(user=request.user)
+
+    if request.method == "POST" and request.POST.get("action") == "remove_photo":
+        user_profile.photo.delete(save=False)
+        user_profile.photo = None
+        user_profile.save()
+        messages.success(request, "Photo de profil supprimée.")
+        return redirect("approvals:profile")
+
+    if request.method == "POST":
+        photo_form = ProfilePhotoForm(request.POST, request.FILES, instance=user_profile)
+        if photo_form.is_valid():
+            photo_form.save()
+            messages.success(request, "Photo de profil mise à jour.")
+            return redirect("approvals:profile")
+    else:
+        photo_form = ProfilePhotoForm(instance=user_profile)
+
     manager_display = "—"
     if user_profile.manager:
         manager_display = user_profile.manager.get_full_name() or user_profile.manager.username
     return render(
         request, "approvals/profile.html",
-        {"profile": user_profile, "manager_display": manager_display},
+        {"profile": user_profile, "manager_display": manager_display, "photo_form": photo_form},
     )
 
 

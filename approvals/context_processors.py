@@ -15,7 +15,11 @@ def sidebar(request):
         if request.user.id in WorkflowEngine(req).get_effective_approvers():
             pending_count += 1
 
+    profile = getattr(request.user, "profile", None)
+    photo_url = profile.photo.url if profile and profile.photo else None
+
     return {
         "nav_request_types": request_types,
         "nav_pending_count": pending_count,
+        "nav_photo_url": photo_url,
     }

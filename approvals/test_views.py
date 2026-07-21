@@ -8,8 +8,11 @@ WorkflowEngine seul ne pouvaient pas détecter ça : le moteur fonctionnait
 très bien, c'est l'enchaînement décision -> redirection -> permission de vue
 qui était cassé.
 """
+import shutil
+import tempfile
+
 from django.contrib.auth.models import User
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
 
 from .models import ApprovalRule, Request, RequestType, UserProfile
 
@@ -125,6 +128,74 @@ class ProfilePageTests(TestCase):
         response = self.client.get("/profil/")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(UserProfile.objects.filter(user__username="brand_new_user").exists())
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ProfilePhotoTests(TestCase):
+    """Photo de profil (retour client) : stockée sur disque via ImageField,
+    la base ne garde qu'un chemin de fichier — jamais le binaire de l'image."""
+
+    @classmethod
+    def tearDownClass(cls):
+        from django.conf import settings
+
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def _tiny_png(self, name="avatar.png"):
+        import io
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        buffer = io.BytesIO()
+        Image.new("RGB", (1, 1), color="white").save(buffer, format="PNG")
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+    def test_uploading_photo_stores_file_path_not_binary_in_db(self):
+        user = User.objects.create_user("photo_user", password="x")
+        self.client.login(username="photo_user", password="x")
+
+        response = self.client.post("/profil/", {"photo": self._tiny_png()}, follow=True)
+        self.assertEqual(response.status_code, 200)
+
+        profile = UserProfile.objects.get(user=user)
+        self.assertTrue(profile.photo.name.startswith("profile_photos/"))
+        profile.photo.delete(save=False)
+
+    def test_removing_photo_clears_the_field(self):
+        user = User.objects.create_user("photo_user2", password="x")
+        profile = UserProfile.objects.create(user=user)
+        profile.photo.save("avatar.png", self._tiny_png(), save=True)
+        self.client.login(username="photo_user2", password="x")
+
+        response = self.client.post("/profil/", {"action": "remove_photo"}, follow=True)
+        self.assertEqual(response.status_code, 200)
+
+        profile.refresh_from_db()
+        self.assertFalse(profile.photo)
+
+    def test_oversized_photo_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        user = User.objects.create_user("photo_user3", password="x")
+        self.client.login(username="photo_user3", password="x")
+        big_file = SimpleUploadedFile(
+            "big.png", b"\x89PNG\r\n\x1a\n" + b"0" * (3 * 1024 * 1024), content_type="image/png"
+        )
+        response = self.client.post("/profil/", {"photo": big_file})
+        self.assertEqual(response.status_code, 200)  # ré-affiche le formulaire avec l'erreur
+        self.assertFalse(UserProfile.objects.get(user=user).photo)
+
+    def test_wrong_file_type_rejected(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        user = User.objects.create_user("photo_user4", password="x")
+        self.client.login(username="photo_user4", password="x")
+        bad_file = SimpleUploadedFile("notes.txt", b"pas une image", content_type="text/plain")
+        response = self.client.post("/profil/", {"photo": bad_file})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(UserProfile.objects.get(user=user).photo)
 
 
 class LoginRedirectTests(TestCase):
