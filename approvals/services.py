@@ -34,6 +34,16 @@ class WorkflowEngine:
         snapshot = self._build_snapshot()
         previous_status = request.status
 
+        if snapshot and not snapshot[0]["approver_ids"]:
+            # Ex: règle "Manager du demandeur" sans manager configuré et sans utilisateur
+            # de repli — la demande resterait bloquée indéfiniment, personne ne pouvant
+            # l'approuver (bug UAT : un admin sans manager ne trouvait aucun approbateur).
+            raise RoutingError(
+                "Aucun approbateur n'a pu être déterminé pour le premier niveau de cette "
+                "demande (le demandeur n'a peut-être pas de manager configuré). "
+                "Contacte un administrateur fonctionnel avant de soumettre."
+            )
+
         if not snapshot:
             # Aucune règle ne correspond : approbation automatique (cf. diagramme, noeud G)
             request.status = Request.Status.APPROVED

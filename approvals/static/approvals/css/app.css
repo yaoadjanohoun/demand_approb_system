@@ -232,6 +232,12 @@ tr:last-child td { border-bottom: none; }
 .btn-reject:hover { filter: brightness(0.92); }
 .btn-return { background: var(--info); color: #fff; }
 .btn-return:hover { filter: brightness(0.92); }
+
+.decision-actions {
+  display: flex; flex-wrap: nowrap; gap: 0.6rem; margin-top: 1rem;
+  overflow-x: auto; padding-bottom: 2px; /* évite que le scroll horizontal ne rogne les boutons */
+}
+.decision-actions form { display: inline-flex; flex-shrink: 0; }
 .btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
 .btn[disabled] { opacity: 0.5; cursor: not-allowed; }
 

@@ -143,6 +143,24 @@ class WorkflowEngineTests(TestCase):
         request.refresh_from_db()
         self.assertEqual(request.status, Request.Status.APPROVED)
 
+    def test_submit_blocked_when_no_approver_can_be_determined(self):
+        """Bug UAT : un demandeur sans manager (ex: l'admin) soumettant une
+        demande dont la règle de niveau 1 est "Manager du demandeur", sans
+        utilisateur de repli configuré, ne trouvait aucun approbateur — la
+        demande restait bloquée indéfiniment, invisible pour quiconque."""
+        no_manager_user = User.objects.create_user("orphan_user", password="x")
+        request_type = RequestType.objects.create(
+            name="Congés", code="LEAVE_ORPHAN", form_schema={"fields": []},
+        )
+        ApprovalRule.objects.create(
+            request_type=request_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+        request = Request.objects.create(request_type=request_type, requester=no_manager_user, data={})
+        with self.assertRaises(RoutingError):
+            WorkflowEngine(request).submit(actor=no_manager_user)
+        request.refresh_from_db()
+        self.assertEqual(request.status, Request.Status.DRAFT)
+
     def test_rule_change_after_submission_does_not_affect_snapshot(self):
         request = self.make_request(2500)
         engine = WorkflowEngine(request)

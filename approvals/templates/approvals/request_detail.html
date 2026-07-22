@@ -44,7 +44,7 @@
     <label for="comment-text">Commentaire (obligatoire pour refuser ou retourner)</label>
     <textarea id="comment-text" rows="2"></textarea>
 
-    <p style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap;">
+    <div class="decision-actions">
         <form method="post" action="{% url 'approvals:request_approve' req.pk %}" onsubmit="document.getElementById('approve-comment').value = document.getElementById('comment-text').value;">
             {% csrf_token %}
             <input type="hidden" name="comment" id="approve-comment">
@@ -62,7 +62,7 @@
             <input type="hidden" name="comment" id="reject-comment">
             <button type="submit" class="btn btn-reject">Refuser</button>
         </form>
-    </p>
+    </div>
 </div>
 {% endif %}
 
