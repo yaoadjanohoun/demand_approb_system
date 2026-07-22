@@ -65,7 +65,7 @@
         {% endif %}
 
         <div class="sidebar-footer">
-            <form method="post" action="{% url 'logout' %}" data-confirm="Fermer ta session ?">
+            <form method="post" action="{% url 'logout' %}" data-confirm="Fermer votre session ?">
                 {% csrf_token %}
                 <button type="submit" class="nav-link" style="width:100%; background:none; border:none; cursor:pointer; text-align:left; font:inherit; display:flex; align-items:center; gap:0.5rem;">
                     <span aria-hidden="true">⎋</span><span class="label">Déconnexion</span>

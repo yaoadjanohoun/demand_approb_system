@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
@@ -9,6 +10,8 @@ from . import reports as reports_module
 from .forms import ProfilePhotoForm, build_dynamic_form, labeled_data
 from .models import Request, RequestAttachment, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
+
+LIST_PAGE_SIZE = 15
 
 
 @login_required
@@ -246,9 +249,13 @@ def my_requests(request):
     if type_code:
         requests = requests.filter(request_type__code=type_code)
         active_request_type = RequestType.objects.filter(code=type_code).first()
+    page_obj = Paginator(requests, LIST_PAGE_SIZE).get_page(request.GET.get("page"))
     return render(
         request, "approvals/my_requests.html",
-        {"requests": requests, "active_type": type_code, "active_request_type": active_request_type},
+        {
+            "requests": page_obj, "page_obj": page_obj,
+            "active_type": type_code, "active_request_type": active_request_type,
+        },
     )
 
 
@@ -258,9 +265,10 @@ def pending_approvals(request):
     type_code = request.GET.get("type")
     if type_code:
         pending = [req for req in pending if req.request_type.code == type_code]
+    page_obj = Paginator(pending, LIST_PAGE_SIZE).get_page(request.GET.get("page"))
     return render(
         request, "approvals/pending_list.html",
-        {"requests": pending, "active_type": type_code},
+        {"requests": page_obj, "page_obj": page_obj, "active_type": type_code},
     )
 
 
@@ -281,12 +289,18 @@ def request_detail(request, pk):
         and request.user.id in WorkflowEngine(req).get_effective_approvers()
     )
     is_requester = req.requester_id == request.user.id
+    next_request = None
     if is_requester:
         back_url = reverse("approvals:my_requests")
         back_label = "Mes demandes"
     else:
         back_url = reverse("approvals:pending_approvals")
         back_label = "À approuver"
+        remaining = [
+            other for other in _pending_requests_for_user(request.user)
+            if other.request_type_id == req.request_type_id and other.id != req.id
+        ]
+        next_request = remaining[0] if remaining else None
     return render(
         request, "approvals/request_detail.html",
         {
@@ -296,6 +310,7 @@ def request_detail(request, pk):
             "attachments": req.attachments.all(),
             "is_current_approver": is_current_approver,
             "is_requester": is_requester,
+            "next_request": next_request,
             "back_url": back_url,
             "back_label": back_label,
         },

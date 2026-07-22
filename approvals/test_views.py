@@ -425,6 +425,100 @@ class MyRequestsSubmitButtonTests(TestCase):
         self.assertContains(response, 'href="/"')
 
 
+class PaginationTests(TestCase):
+    """Le design n'avait été testé qu'avec 2-3 demandes (retour client) — au
+    delà de LIST_PAGE_SIZE, les listes doivent être paginées plutôt que de
+    tout afficher sur une seule page."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee1", password="x")
+        self.request_type = RequestType.objects.create(
+            name="Congés", code="LEAVE", is_active=True, form_schema={"fields": []},
+        )
+        for _ in range(20):
+            Request.objects.create(
+                request_type=self.request_type, requester=self.employee, status=Request.Status.APPROVED,
+            )
+        self.client.login(username="employee1", password="x")
+
+    def test_my_requests_first_page_shows_only_page_size_items(self):
+        from .views import LIST_PAGE_SIZE
+
+        response = self.client.get("/mine/")
+        self.assertEqual(len(response.context["requests"]), LIST_PAGE_SIZE)
+        self.assertContains(response, "Page 1 / 2")
+
+    def test_my_requests_second_page_shows_remaining_items(self):
+        from .views import LIST_PAGE_SIZE
+
+        response = self.client.get("/mine/?page=2")
+        self.assertEqual(len(response.context["requests"]), 20 - LIST_PAGE_SIZE)
+
+    def test_pending_approvals_is_paginated(self):
+        manager = User.objects.create_user("manager1", password="x")
+        UserProfile.objects.create(user=self.employee, manager=manager)
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={}, approvers_config={"type": "manager"}
+        )
+        for _ in range(20):
+            req = Request.objects.create(request_type=self.request_type, requester=self.employee)
+            from .services import WorkflowEngine
+
+            WorkflowEngine(req).submit()
+
+        self.client.login(username="manager1", password="x")
+        response = self.client.get("/pending/")
+        from .views import LIST_PAGE_SIZE
+
+        self.assertEqual(len(response.context["requests"]), LIST_PAGE_SIZE)
+
+
+class NextRequestLinkTests(TestCase):
+    """Après une décision, l'approbateur doit pouvoir enchaîner directement sur
+    une autre demande du même type sans repasser par la liste (retour client)."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user("manager1", password="x")
+        self.employee = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=self.employee, manager=self.manager)
+        self.request_type = RequestType.objects.create(
+            name="Congés", code="LEAVE", is_active=True, form_schema={"fields": []},
+        )
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={}, approvers_config={"type": "manager"}
+        )
+
+    def _submit(self):
+        from .services import WorkflowEngine
+
+        req = Request.objects.create(request_type=self.request_type, requester=self.employee)
+        WorkflowEngine(req).submit()
+        return req
+
+    def test_shows_link_to_next_pending_request_of_same_type(self):
+        req1 = self._submit()
+        req2 = self._submit()
+        self.client.login(username="manager1", password="x")
+
+        response = self.client.get(f"/{req1.pk}/")
+        self.assertContains(response, f"/{req2.pk}/")
+        self.assertContains(response, "Traiter la demande suivante")
+
+    def test_falls_back_to_list_when_no_other_pending_request(self):
+        req = self._submit()
+        self.client.login(username="manager1", password="x")
+
+        response = self.client.get(f"/{req.pk}/")
+        self.assertContains(response, "Retour à la liste des demandes à approuver")
+
+    def test_no_next_request_section_for_the_requester(self):
+        req = self._submit()
+        self.client.login(username="employee1", password="x")
+
+        response = self.client.get(f"/{req.pk}/")
+        self.assertNotContains(response, "card-title\">Suite<")
+
+
 class LoginRedirectTests(TestCase):
     def test_visiting_login_page_while_authenticated_redirects_to_dashboard(self):
         User.objects.create_user("someone", password="x")

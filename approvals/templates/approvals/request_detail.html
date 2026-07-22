@@ -66,6 +66,17 @@
 </div>
 {% endif %}
 
+{% if not is_requester %}
+<div class="card">
+    <div class="card-title">Suite</div>
+    {% if next_request %}
+        <a class="btn btn-secondary" href="{% url 'approvals:request_detail' next_request.pk %}">Traiter la demande suivante ({{ next_request.request_type.name }}) →</a>
+    {% else %}
+        <a class="btn btn-secondary" href="{% url 'approvals:pending_approvals' %}">← Retour à la liste des demandes à approuver</a>
+    {% endif %}
+</div>
+{% endif %}
+
 <div class="card">
     <div class="card-title">Historique</div>
     <table>
