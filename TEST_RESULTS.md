@@ -2,7 +2,7 @@
 
 **Dernière exécution :** 2026-07-22
 **Commande :** `python manage.py test approvals`
-**Résultat :** ✅ 116 / 116 tests réussis (0 échec, 0 erreur)
+**Résultat :** 116 / 116 tests réussis (0 échec, 0 erreur)
 
 ## Répartition par module
 
