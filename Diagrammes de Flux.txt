@@ -1,0 +1,189 @@
+Diagrammes de Flux — Système de Demandes et d'Approbation
+Ce document décrit les flux logiques (BPMN/UML) que le moteur Django devra exécuter. Il se concentre sur trois scénarios majeurs : le Routage Standard, la Gestion des Délégations et le Circuit de Retour/Refus.
+
+1. Flux Principal : Soumission et Routage Dynamique
+Ce diagramme décrit le parcours d'une demande depuis sa soumission jusqu'à son premier approbateur, en intégrant la résolution des règles JSON.
+
+Séquençage Logique :
+
+Soumission : L'utilisateur valide le formulaire. Le système vérifie la conformité des données data (JSON) par rapport au form_schema.
+Snapshot : Le système fige les métadonnées contextuelles (Département, Site, Manager N+1) dans snapshot_metadata pour éviter que l'évolution de l'organigramme n'affecte la demande en cours.
+Moteur de Règles :
+Le système récupère toutes les ApprovalRule actives pour le RequestType.
+Il filtre les règles où les criteria (JSON) correspondent aux données de la demande (ex: montant > 1000 ET département == 'IT').
+Résolution des Approbateurs : Pour chaque règle valide, le système lit approvers_config pour identifier l'utilisateur ou le groupe cible.
+Vérification de Délégation : Avant d'assigner la tâche, le système interroge la table Delegation. Si l'approbateur cible est absent à la date du jour, la tâche est assignée au delegate.
+Notification : Envoi d'un email (via Exchange) et création d'une tâche dans le tableau de bord de l'approbateur.
+
+BPMN diagram examples for dynamic approval workflow routing
+
+Tout afficher
+Représentation Schématique (Pseudo-code Visuel) :
+
+graph TD
+    A[Début: Soumission Demande] --> B{Validation Schéma JSON}
+    B -- Échec --> C[Retour Erreur Utilisateur]
+    B -- Succès --> D[Création Snapshot Metadata]
+    D --> E[Recherche Règles (ApprovalRule)]
+    E --> F{Règles Correspondantes ?}
+    F -- Non --> G[Approbation Auto / Fin]
+    F -- Oui --> H[Résolution Approbateurs]
+    H --> I{Délégation Active ?}
+    I -- Oui --> J[Assigner au Remplaçant]
+    I -- Non --> K[Assigner à l'Approbateur Cible]
+    J --> L[Notification & Attente]
+    K --> L
+
+2. Flux Secondaire : Gestion des Délégations et Absences
+Ce flux détaille la logique spécifique de remplacement temporaire, cruciale pour la continuité métier.
+
+Points de Décision Clés :
+
+Plage de Dates : La délégation n'est active que si start_date <= Date du Jour <= end_date.
+Périmètre (Scope) : Si le champ scope de la délégation est rempli, le système vérifie que le RequestType de la demande correspond à l'un des IDs autorisés. Sinon, la délégation est ignorée pour cette demande.
+Récursivité : Si le remplaçant est également absent, le système doit-il chercher un sous-remplaçant ? (Recommandation : Non, pour éviter les boucles complexes. La demande reste dans la file du remplaçant avec une alerte à l'admin).
+
+handling delegation chains in workflow engines best practices site:reddit.com
+
+Tout afficher
+3. Flux d'Exception : Refus, Retour et Resoumission
+Contrairement à une approbation linéaire, un refus ou une demande d'information modifie l'état et le routage.
+
+Scénarios :
+
+Refus (Reject) :
+L'approbateur saisit un motif obligatoire.
+Le statut passe à REJECTED.
+Le workflow s'arrête immédiatement. Notification au demandeur. Aucune autre approbation n'est sollicitée.
+Retour pour Information (Return) :
+L'approbateur demande une modification.
+Le statut passe à RETURNED.
+La demande revient dans le brouillon du Demandeur.
+Point Critique : Lors de la resoumission, le workflow reprend-il au niveau 1 ou au niveau où il a été bloqué ?
+Choix de conception : Par défaut, reprise au niveau 1 pour ré-validation complète, sauf configuration contraire dans RequestType (ex: resume_from_current_level = true).
+
+workflow state machine diagram reject and resubmit logic
+
+Tout afficher
+4. Flux de Configuration (Admin Fonctionnel)
+Ce flux décrit comment un administrateur modifie une règle sans code, impactant immédiatement le moteur.
+
+Séquençage :
+
+L'admin accède à l'interface de gestion des règles.
+Il crée ou modifie une ApprovalRule (changement de seuil, ajout d'un approbateur).
+Le système valide la syntaxe JSON des criteria et approvers_config.
+Audit : Une entrée est créée dans ApprovalLog (type RULE_CHANGE) avec l'ancienne et la nouvelle valeur.
+Activation : La règle est marquée is_active = true.
+Impact Immédiat : Toute nouvelle demande soumise après cette seconde utilise la nouvelle règle. Les demandes en cours continuent avec le snapshot des règles ou des approbateurs au moment de leur soumission (selon la politique choisie : recommandation = Snapshot des approbateurs pour stabilité).
+
+Validation des Règles de Reprise (Retour pour Information)
+Pour maximiser l'efficacité tout en garantissant la sécurité, nous adoptons une approche hybride configurable.
+
+Règle par Défaut (Sécurité) : Reprise au Niveau 1
+Logique : Si une demande est "Retournée" (RETURNED), elle revient en brouillon chez le demandeur. À la resoumission, tout le cycle d'approbation redémarre à zéro (Niveau 1).
+Justification : Toute modification du demandeur (même mineure) peut invalider les approbations précédentes. Repartir de zéro garantit que tous les approbateurs valident la version finale.
+Exception Configurable (Flexibilité) : Reprise au Niveau Courant
+Implémentation : Ajout d'un champ booléen resume_on_resubmit dans le modèle RequestType.
+Logique : Si true, le système utilise le champ current_level (déjà présent dans le modèle Request) pour reprendre le flux exactement là où il a été bloqué.
+Cas d'usage : Corrections de coquilles ou ajouts de pièces jointes ne changeant pas le fond (montant, dates).
+Impact sur le Diagramme de Flux : Ajoutez un losange de décision après l'état RETURNED : { RequestType.resume_on_resubmit == True ? }
+
+OUI → Transition vers current_level.
+NON → Transition vers level = 1. 
+
+approval workflow resume from current level vs restart best practices
+
+Tout afficher
+2. Politique de Snapshot : "Liste des Utilisateurs" (Recommandé)
+Pour éviter qu'une règle supprimée ou modifiée ne bloque une demande en cours, nous figeons l'identité des approbateurs au moment de la soumission, pas la règle elle-même.
+
+Ce qu'on snapshotte (dans Request.snapshot_metadata) :
+La liste explicite des IDs d'utilisateurs (ou de groupes) requis pour chaque niveau.
+Structure JSON :
+{
+  "workflow_snapshot": [
+    {"level": 1, "approver_ids": [105, 108], "status": "pending"},
+    {"level": 2, "approver_ids": [204], "status": "waiting"}
+  ]
+}
+
+Ce qu'on NE snapshotte PAS :
+La règle métier (ApprovalRule) ni ses critères JSON.
+Avantage Majeur :
+Si l'admin modifie la règle "Seuil > 1000€" le lendemain de la soumission, la demande en cours n'est pas affectée. Elle continue vers les utilisateurs figés dans le snapshot.
+Si un utilisateur est supprimé de l'AD entre-temps, le système détecte l'ID invalide dans le snapshot et peut déclencher une alerte "Approcheur introuvable" à l'admin, sans bloquer tout le flux.
+Impact sur le Diagramme de Flux : Ajoutez une étape critique "Pré-Routage" juste après la validation du formulaire : Action: Calculer les approbateurs cibles via les Règles Actuelles → Écrire IDs dans Request.snapshot_metadata → Ignorer les règles futures pour cette instance.
+
+
+Django workflow snapshot approvers vs rules best practices
+
+Tout afficher
+3. Traduction en Tests Unitaires (Pytest)
+Chaque branche de vos diagrammes devient un test pytest utilisant la bibliothèque django-fsm ou python-statemachine. Voici la structure type pour couvrir ces scénarios :
+
+Fichier : tests/test_workflow_transitions.py
+
+import pytest
+from django.utils import timezone
+from requests.models import Request, ApprovalRule, Delegation
+from requests.services import WorkflowEngine
+
+@pytest.mark.django_db
+def test_resubmission_restarts_at_level_1_by_default(demande_retournee):
+    """Vérifie qu'une demande retournée repart au niveau 1 si l'option n'est pas activée."""
+    # Arrange
+    demande_retournee.status = 'RETURNED'
+    demande_retournee.current_level = 2  # Était bloquée au niveau 2
+    demande_retournee.request_type.resume_on_resubmit = False
+    demande_retournee.save()
+
+    # Act
+    workflow = WorkflowEngine(demande_retournee)
+    workflow.resoumettre()  # Action du demandeur
+
+    # Assert
+    demande_retournee.refresh_from_db()
+    assert demande_retournee.current_level == 1, "Doit revenir au niveau 1 par défaut"
+    assert demande_retournee.status == 'PENDING'
+
+@pytest.mark.django_db
+def test_resubmission_resumes_at_current_level_if_configured(demande_retournee_config):
+    """Vérifie la reprise au niveau courant si configuré dans le Type de Demande."""
+    # Arrange
+    demande_retournee_config.request_type.resume_on_resubmit = True
+    demande_retournee_config.current_level = 2
+    demande_retournee_config.save()
+
+    # Act
+    workflow = WorkflowEngine(demande_retournee_config)
+    workflow.resoumettre()
+
+    # Assert
+    demande_retournee_config.refresh_from_db()
+    assert demande_retournee_config.current_level == 2, "Doit reprendre au niveau 2"
+
+@pytest.mark.django_db
+def test_snapshot_freezes_approvers_even_if_rule_changes(demande_en_cours, nouvelle_regle):
+    """Vérifie que la modification d'une règle n'affecte pas une demande déjà soumise."""
+    # Arrange
+    # 1. Soumission initiale (Snapshot des approbateurs A et B)
+    workflow = WorkflowEngine(demande_en_cours)
+    workflow.soumettre()
+    snapshot_initial = demande_en_cours.snapshot_metadata['workflow_snapshot']
+    
+    # 2. L'admin modifie la règle pour cibler l'approbateur C
+    nouvelle_regle.approvers_config = {"type": "user", "user_id": 999} # Approbateur C
+    nouvelle_regle.save()
+
+    # Act
+    # On force le recalcul du routage (simulant un trigger ou une étape suivante)
+    workflow.prochain_niveau()
+
+    # Assert
+    demande_en_cours.refresh_from_db()
+    # Le snapshot doit toujours contenir A et B, pas C
+    assert 999 not in demande_en_cours.snapshot_metadata['workflow_snapshot'][0]['approver_ids']
+    assert snapshot_initial == demande_en_cours.snapshot_metadata['workflow_snapshot']
+
+Ces éléments valident techniquement vos diagrammes et assurent que le code Django sera robuste dès le premier sprint.

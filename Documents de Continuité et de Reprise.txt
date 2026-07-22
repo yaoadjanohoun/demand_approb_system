@@ -1,0 +1,94 @@
+Documents de Continuité et de Reprise (PRA/PCA) — Système de Demandes et d'Approbation
+Ce document définit les procédures opérationnelles pour maintenir la capacité d'approbation de l'entreprise en cas de défaillance majeure du système Django, garantissant ainsi la continuité des activités critiques (paie, achats, congés).
+
+1. Analyse d'Impact sur l'Activité (BIA)
+Avant de définir les procédures, nous identifions les impacts d'une indisponibilité du système :
+
+Impact Critique (Immédiat) : Blocage des validations de commandes fournisseurs (risque de rupture de stock) et des notes de frais (impact trésorerie employés).
+Impact Majeur (J+2) : Blocage des validations de congés (risque social) et des contrats.
+Objectifs de Reprise :
+RTO (Recovery Time Objective) : 4 heures maximum d'interruption avant activation du mode dégradé.
+RPO (Recovery Point Objective) : Perte de données maximale acceptée de 15 minutes (dernière sauvegarde transactionnelle SQL Server).
+
+Business Continuity Plan template for internal workflow applications Microsoft stack
+
+Tout afficher
+2. Scénarios de Crise et Niveaux d'Alerte
+Niveau	Scénario	Impact	Décision d'Activation
+Niveau 1	Ralentissement important (> 10s de réponse).	Gêne opérationnelle.	Chef de Projet DSI.
+Niveau 2	Indisponibilité partielle (ex: Emails HS, mais accès UI OK).	Retards de validation.	DSI Adjoint.
+Niveau 3	Indisponibilité Totale (Serveur HS, Base de données corrompue).	Arrêt des processus d'approbation.	DSI + Directeur Métier (RH/Finance).
+
+3. Procédure de Secours : Mode Dégradé (Manuel)
+Dès l'activation du Niveau 3, le processus bascule immédiatement sur le mode manuel suivant, jusqu'au rétablissement du service.
+
+Étape 1 : Communication de Crise (T0 + 15 min)
+La DSI envoie un email officiel (via Exchange) à tous les managers et demandeurs : "Le système d'approbation est indisponible. Veuillez utiliser la procédure d'urgence ci-jointe."
+Publication d'une alerte sur l'intranet Microsoft Teams.
+Étape 2 : Utilisation des Kits de Secours (T0 + 30 min)
+Des kits de secours (fichiers Excel sécurisés et modèles Word) sont pré-positionnés sur le SharePoint de l'entreprise, accessibles en lecture seule même en cas de panne applicative.
+
+Pour les Demandeurs :
+Télécharger le "Formulaire d'Urgence Unique" (Excel protégé).
+Le remplir, le signer électroniquement (si possible) ou scanner la signature.
+L'envoyer par email directement à son approbateur habituel (connu via l'annuaire AD) et en copie à urgence-approbation@entreprise.com (boîte de supervision).
+Pour les Approbateurs :
+Recevoir la demande par email.
+Valider en répondant à l'email avec la mention explicite "BON POUR ACCORD" (valeur probante temporaire).
+Conserver une trace locale du mail validé.
+
+emergency manual approval workflow template Excel email
+
+Tout afficher
+Étape 3 : Supervision et Journalisation de Crise
+Une équipe de crise (1 Admin Fonctionnel + 1 Support DSI) surveille la boîte urgence-approbation@entreprise.com.
+Ils tiennent un Journal de Crise (Log) (fichier Excel partagé) listant : ID Demandeur, Type, Montant, Date, Approbateur, Statut Email. Cela servira à la resaisie ultérieure.
+4. Procédure de Reprise et Resaisie (Post-Crise)
+Une fois le système Django rétabli et validé par la DSI :
+
+Annonce de Fin de Crise : Email officiel indiquant la reprise du service et l'arrêt du mode dégradé.
+Resaisie des Données (Data Catch-up) :
+L'équipe de crise utilise le Journal de Crise pour resaisir les demandes dans le système Django.
+Statut Spécifique : Ces demandes sont créées avec le statut MANUAL_RECOVERY et un champ recovery_date pour les distinguer.
+Validation A Posteriori : Le système envoie une notification aux approbateurs : "Cette demande a été validée par email durant la crise du [Date]. Cliquez pour confirmer et clôturer dans le système." (Cliquez pour archiver).
+Archivage des Preuves :
+Les emails de validation "Bon pour accord" et les formuliers Excel sont archivés numériquement dans un dossier sécurisé SharePoint, liés à la demande resaisie, pour servir de preuve en cas d'audit légal.
+
+data reconciliation process after system outage workflow
+
+Tout afficher
+5. Rôles et Responsabilités en Cas de Crise
+Rôle	Responsabilité	Contact de Secours (Hors Système)
+Commandant des Opérations (DSI)	Décide du basculement et du retour à la normale.	Téléphone mobile / Teams.
+Coordinateur Métier (RH/Finance)	Valide que la procédure manuelle est suivie par les équipes.	Téléphone mobile.
+Équipe de Resaisie	Effectue la réinjection des données dans Django post-crise.	Email / Teams.
+Support Utilisateur	Répond aux questions sur les formuliers d'urgence.	Hotline téléphonique.
+
+6. Tests et Maintenance du Plan
+Un plan de reprise non testé est un plan qui échouera.
+
+Fréquence des Tests : Un exercice de simulation (tabletop exercise) est organisé tous les 6 mois.
+Scénario de Test : Simulation d'une panne totale un mardi matin. Vérification de la réception des kits de secours, de l'envoi d'un email de validation et de la resaisie d'un échantillon de demandes.
+Mise à Jour : Ce document est révisé après chaque test ou après tout changement majeur d'infrastructure (ex: migration vers une nouvelle version de SQL Server ou Exchange).
+Ce document assure que, même en l'absence totale de l'outil Django, le business continue de tourner et qu'aucune donnée de validation n'est perdue.
+
+
+Suggestions d'Amélioration pour le Document
+Pour finaliser ce document et le rendre parfaitement opérationnel, je vous suggère d'ajouter deux annexes techniques :
+
+Annexe A : Modèle de Journal de Crise (Structure de données)
+Définissez précisément les colonnes du fichier Excel de secours pour faciliter la réinjection (CSV importable dans Django) :
+
+ID_Demandeur_AD (Pour lier automatiquement à l'utilisateur Django)
+Type_Demande (Congés, Achats, Notes de frais - à mapper avec les content_types Django)
+Montant_Total (Format numérique strict, pas de devises)
+Date_Demande (Format ISO YYYY-MM-DD)
+Email_Approbateur (Pour vérification croisée avec l'AD)
+Preuve_Validation (Lien vers l'email archivé ou ID du message)
+Annexe B : Script de Validation Post-Crise
+Décrivez le processus technique de validation :
+
+Import CSV des données du Journal de Crise dans une table temporaire Django.
+Exécution de requêtes de contrôle (Somme des montants vs Total Excel).
+Génération d'un rapport d'écarts pour l'équipe de resaisie.
+Bascule officielle des statuts MANUAL_RECOVERY vers APPROUVED après confirmation métier.

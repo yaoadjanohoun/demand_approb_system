@@ -1,0 +1,75 @@
+Documents Juridiques et de Conformité — Système de Demandes et d'Approbation
+Ce document garantit que le système respecte les obligations légales (RGPD), les politiques internes de l'entreprise et les exigences d'audit, tout en s'intégrant dans l'écosystème Microsoft de l'organisation.
+
+1. Registre des Traitements (Conformité RGPD)
+Conformément au Règlement Général sur la Protection des Données (RGPD), ce système traite des données personnelles. Ce registre doit être soumis au DPO (Délégué à la Protection des Données) de l'entreprise.
+
+Finalité du traitement : Gestion électronique des workflows d'approbation interne (congés, achats, notes de frais).
+Catégories de données traitées :
+Identité : Nom, Prénom, Matricule, Département, Fonction (issus de l'AD).
+Données de demande : Montants, Motifs, Dates, Pièces jointes (factures, certificats).
+Données de décision : Statut (Approuvé/Refusé), Commentaires, Horodatages.
+Données de connexion : Adresses IP, Logs d'audit (pour la sécurité).
+Base légale : Exécution du contrat de travail et intérêt légitime de l'entreprise (organisation interne).
+Durée de conservation :
+Demandes actives : Durée du workflow + 2 mois.
+Historique archivé : 5 ans (ou durée légale comptable/fiscale en vigueur) pour justificatif d'audit.
+Logs d'audit : 3 ans.
+Destinataires : Demandeur, Approbateurs désignés, Administrateurs Fonctionnels, Service Audit/RH, DSI.
+Transferts hors UE : Aucun (Hébergement sur infrastructure interne Microsoft de l'entreprise).
+
+RGPD register template for internal approval workflow HR finance
+
+Tout afficher
+2. Politique de Rétention et d'Archivage
+Définit le cycle de vie des données pour éviter l'encombrement et respecter la loi.
+
+Phase Active (Base de données de production) :
+Les demandes sont accessibles en lecture/écriture tant qu'elles ne sont pas clôturées.
+Une fois clôturées (Approuvé/Refusé), elles passent en "Lecture Seule" après 3 mois.
+Phase d'Archivage Intermédiaire :
+Après 1 an, les demandes sont déplacées vers une table d'archivage ou une base de données froide (moins coûteuse, haute sécurité).
+L'accès est restreint aux Auditeurs et à la DSI.
+Purge Automatique :
+Un script automatisé (tâche Cron/Job SQL) supprime définitivement les données anonymisées après 5 ans (sauf obligation légale comptable supérieure).
+Les pièces jointes sensibles (ex: certificats médicaux) peuvent avoir une durée de conservation réduite (ex: 2 ans) avant purge, selon la politique RH.
+
+data retention policy template for financial approval systems GDPR
+
+Tout afficher
+3. Accord de Niveau de Service (SLA) Interne & Sécurité
+Document contractuel entre la DSI (fournisseur) et les Métiers (clients) définissant les engagements.
+
+Disponibilité :
+Engagement : 99.5% durant les heures ouvrées (Lundi-Vendredi, 8h-19h).
+Maintenance : Fenêtres de maintenance prévues le Samedi nuit, avec préavis de 48h.
+Continuité de Service (PRA) :
+En cas de panne critique, le Plan de Reprise d'Activité (voir document dédié) s'active : bascule vers une procédure manuelle temporaire (formulaires Excel signés) avec régularisation a posteriori dans le système.
+RTO (Recovery Time Objective) : < 4 heures.
+RPO (Recovery Point Objective) : < 15 minutes (grâce aux sauvegardes transactionnelles SQL Server).
+Sécurité des Données :
+Chiffrement : Les données sensibles (champ data pour les types "Médical" ou "Salaire") sont chiffrées au repos (AES-256) dans la base SQL Server.
+Authentification : Obligatoirement via Active Directory (SSO). Aucun compte local n'est autorisé.
+Audit : Toute action critique (modification de règle, export de masse, consultation de données sensibles) est journalisée de manière inaltérable.
+
+SLA template for internal enterprise application Microsoft stack
+
+Tout afficher
+4. Droits des Personnes (Exercice des droits RGPD)
+Procédure pour répondre aux demandes des utilisateurs (employés) concernant leurs données.
+
+Droit d'accès : Tout utilisateur peut exporter l'historique complet de ses propres demandes via l'interface ("Mes Données").
+Droit de rectification :
+Pour les données de profil (Nom, Département) : Se fait automatiquement via la synchronisation AD (source de vérité).
+Pour les erreurs de saisie dans une demande : Possible uniquement tant que la demande est en statut "Brouillon" ou "Retournée". Une fois approuvée, la donnée est figée pour valeur probante (seule une note de correction peut être ajoutée).
+Droit à l'oubli (Effacement) :
+Limité : Le droit à l'effacement ne s'applique pas aux données financières et RH conservées pour obligation légale (preuve comptable, litige prud'homal).
+Les données seront anonymisées (nom remplacé par "Utilisateur X") à l'issue de la période légale de conservation.
+5. Validation et Signature
+Ce document doit être validé et signé par :
+
+Le DPO (Délégué à la Protection des Données).
+Le Directeur Juridique.
+Le DSI (pour la faisabilité technique des mesures de sécurité).
+Le Directeur des Ressources Humaines (pour la politique de conservation des données RH).
+Conclusion : Ce document est indispensable. Il protège l'entreprise et le projet. Je vous recommande de le rédiger en parallèle des spécifications techniques pour valider les choix de chiffrement et de durée de conservation dès la conception de la base de données.
