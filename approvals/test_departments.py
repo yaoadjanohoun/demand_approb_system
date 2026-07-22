@@ -184,3 +184,51 @@ class AdminDashboardTests(TestCase):
         self.client.force_login(superuser)
         self.assertEqual(self.client.get("/admin/approvals/department/").status_code, 200)
         self.assertEqual(self.client.get("/admin/approvals/site/").status_code, 200)
+
+
+class SidebarPermissionFilteringTests(TestCase):
+    """Retour client : un utilisateur (ex: groupe "Comité de direction") à qui
+    on donne une permission mais pas une autre voyait quand même tous les
+    liens de la sidebar admin, cliquait sur celui qu'il n'avait pas le droit
+    d'utiliser, et tombait sur un 403 brut. Chaque lien ne doit apparaître
+    que si l'utilisateur a réellement la permission correspondante."""
+
+    def setUp(self):
+        from .models import ApprovalRule, RequestType
+        from django.contrib.contenttypes.models import ContentType
+        from django.contrib.auth.models import Permission
+
+        self.scoped_user = User.objects.create_user("comite_vente", password="x", is_staff=True)
+        ct = ContentType.objects.get_for_model(ApprovalRule)
+        view_approvalrule = Permission.objects.get(content_type=ct, codename="view_approvalrule")
+        self.scoped_user.user_permissions.add(view_approvalrule)
+
+    def test_scoped_user_sees_only_permitted_sidebar_links(self):
+        # Vérifie les liens navigables (href), pas les libellés en clair : ceux-ci
+        # peuvent aussi apparaître comme texte de simples chiffres clés (non
+        # cliquables) dans le tableau de bord, sans rapport avec la navigation.
+        self.client.login(username="comite_vente", password="x")
+        response = self.client.get("/admin/")
+        self.assertContains(response, 'href="/admin/approvals/approvalrule/"')
+        self.assertNotContains(response, 'href="/admin/approvals/requesttype/"')
+        self.assertNotContains(response, 'href="/admin/approvals/approvallog/"')
+        self.assertNotContains(response, 'href="/admin/approvals/department/"')
+        self.assertNotContains(response, 'href="/admin/auth/group/"')
+        self.assertNotContains(response, 'href="/admin/approvals/emailsettings/"')
+
+    def test_superuser_sees_all_sidebar_links(self):
+        superuser = User.objects.create_superuser("root5", password="x")
+        self.client.force_login(superuser)
+        response = self.client.get("/admin/")
+        for label in (
+            "Types de demandes", "Règles d'approbation", "Délégations", "Demandes",
+            "Journal d'audit", "Rapports", "Profils utilisateur", "Départements",
+            "Sites", "Utilisateurs", "Groupes", "Configuration email",
+        ):
+            self.assertContains(response, label)
+
+    def test_hitting_unauthorized_page_directly_shows_friendly_403(self):
+        self.client.login(username="comite_vente", password="x")
+        response = self.client.get("/admin/approvals/emailsettings/")
+        self.assertEqual(response.status_code, 403)
+        self.assertContains(response, "Accès refusé", status_code=403)

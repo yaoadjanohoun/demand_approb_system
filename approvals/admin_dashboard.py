@@ -14,6 +14,7 @@ from django.contrib.auth.models import Group, User
 from django.urls import reverse
 from django.utils import timezone
 
+from . import admin_permissions
 from . import reports as reports_module
 from .models import Delegation, Department, Request, RequestType, Site
 
@@ -25,19 +26,40 @@ def _chart_json(labels, values, color):
     })
 
 
+# (icône, titre, description, url_name, permission_callback) — même filtrage que la
+# sidebar (retour client) : ces cartes ne doivent pas offrir de liens vers des
+# sections que l'utilisateur n'a pas la permission d'utiliser.
+_QUICK_LINKS = [
+    ("description", "Types de demandes", "Formulaires et champs proposés",
+     "admin:approvals_requesttype_changelist", admin_permissions.can_view_requesttype),
+    ("rule", "Règles d'approbation", "Qui approuve quoi, à quel niveau",
+     "admin:approvals_approvalrule_changelist", admin_permissions.can_view_approvalrule),
+    ("apartment", "Départements", "Référentiel utilisé par les règles",
+     "admin:approvals_department_changelist", admin_permissions.can_view_department),
+    ("location_on", "Sites", "Référentiel utilisé par les règles",
+     "admin:approvals_site_changelist", admin_permissions.can_view_site),
+    ("groups", "Groupes", "Créer et organiser des groupes",
+     "admin:auth_group_changelist", admin_permissions.can_view_group),
+    ("monitoring", "Rapports détaillés", "Statistiques complètes, export CSV",
+     "approvals:reports", admin_permissions.can_view_reports),
+]
+
+
 def dashboard_callback(request, context):
     volume = reports_module.volume_by_month()
     rejection = reports_module.rejection_rate_by_type()
     duration_by_type = reports_module.average_approval_time_by_type()
     duration_by_department = reports_module.average_approval_time_by_department()
 
+    quick_links = [
+        {"icon": icon, "title": title, "description": description, "url": reverse(url_name)}
+        for icon, title, description, url_name, can_view in _QUICK_LINKS
+        if can_view(request)
+    ]
+
     context.update({
-        "requesttype_url": reverse("admin:approvals_requesttype_changelist"),
-        "approvalrule_url": reverse("admin:approvals_approvalrule_changelist"),
-        "department_url": reverse("admin:approvals_department_changelist"),
-        "site_url": reverse("admin:approvals_site_changelist"),
-        "group_url": reverse("admin:auth_group_changelist"),
-        "reports_url": reverse("approvals:reports"),
+        "quick_links": quick_links,
+        "can_view_reports": admin_permissions.can_view_reports(request),
         "admin_summary": reports_module.summary_stats(),
         "admin_counts": {
             "active_users": User.objects.filter(is_active=True).count(),

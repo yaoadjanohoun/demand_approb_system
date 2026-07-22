@@ -45,34 +45,19 @@
     {% endcomponent %}
 </div>
 
+{% if quick_links %}
 {% component "unfold/components/title.html" with class="mb-4" %}Accès rapide{% endcomponent %}
 <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
-    {% component "unfold/components/card.html" with href=requesttype_url icon="description" %}
-        <div class="font-medium text-font-important-light dark:text-font-important-dark">Types de demandes</div>
-        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Formulaires et champs proposés</div>
-    {% endcomponent %}
-    {% component "unfold/components/card.html" with href=approvalrule_url icon="rule" %}
-        <div class="font-medium text-font-important-light dark:text-font-important-dark">Règles d'approbation</div>
-        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Qui approuve quoi, à quel niveau</div>
-    {% endcomponent %}
-    {% component "unfold/components/card.html" with href=department_url icon="apartment" %}
-        <div class="font-medium text-font-important-light dark:text-font-important-dark">Départements</div>
-        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Référentiel utilisé par les règles</div>
-    {% endcomponent %}
-    {% component "unfold/components/card.html" with href=site_url icon="location_on" %}
-        <div class="font-medium text-font-important-light dark:text-font-important-dark">Sites</div>
-        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Référentiel utilisé par les règles</div>
-    {% endcomponent %}
-    {% component "unfold/components/card.html" with href=group_url icon="groups" %}
-        <div class="font-medium text-font-important-light dark:text-font-important-dark">Groupes</div>
-        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Créer et organiser des groupes</div>
-    {% endcomponent %}
-    {% component "unfold/components/card.html" with href=reports_url icon="monitoring" %}
-        <div class="font-medium text-font-important-light dark:text-font-important-dark">Rapports détaillés</div>
-        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Statistiques complètes, export CSV</div>
-    {% endcomponent %}
+    {% for link in quick_links %}
+        {% component "unfold/components/card.html" with href=link.url icon=link.icon %}
+            <div class="font-medium text-font-important-light dark:text-font-important-dark">{{ link.title }}</div>
+            <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">{{ link.description }}</div>
+        {% endcomponent %}
+    {% endfor %}
 </div>
+{% endif %}
 
+{% if can_view_reports %}
 {% component "unfold/components/title.html" with class="mb-4" %}Volume de demandes par mois{% endcomponent %}
 {% component "unfold/components/card.html" with class="mb-8" %}
     {% if admin_has_volume %}
@@ -108,6 +93,7 @@
         <p class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Aucune demande approuvée pour le moment.</p>
     {% endif %}
 {% endcomponent %}
+{% endif %}
 
 <div class="flex flex-col lg:flex-row lg:gap-8">
     <div class="grow">
