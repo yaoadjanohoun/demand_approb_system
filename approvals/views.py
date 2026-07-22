@@ -7,7 +7,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from . import reports as reports_module
-from .forms import ProfilePhotoForm, build_dynamic_form, labeled_data
+from .forms import PersonalInfoForm, ProfilePhotoForm, build_dynamic_form, labeled_data
 from .models import Request, RequestAttachment, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
 
@@ -32,15 +32,25 @@ def dashboard(request):
 @login_required
 def profile(request):
     user_profile, _ = UserProfile.objects.get_or_create(user=request.user)
+    action = request.POST.get("action") if request.method == "POST" else None
 
-    if request.method == "POST" and request.POST.get("action") == "remove_photo":
+    if action == "remove_photo":
         user_profile.photo.delete(save=False)
         user_profile.photo = None
         user_profile.save()
         messages.success(request, "Photo de profil supprimée.")
         return redirect("approvals:profile")
 
-    if request.method == "POST":
+    if action == "update_info":
+        info_form = PersonalInfoForm(request.POST, instance=request.user)
+        if info_form.is_valid():
+            info_form.save()
+            messages.success(request, "Informations personnelles mises à jour.")
+            return redirect("approvals:profile")
+    else:
+        info_form = PersonalInfoForm(instance=request.user)
+
+    if action == "update_photo":
         photo_form = ProfilePhotoForm(request.POST, request.FILES, instance=user_profile)
         if photo_form.is_valid():
             photo_form.save()
@@ -54,7 +64,10 @@ def profile(request):
         manager_display = user_profile.manager.get_full_name() or user_profile.manager.username
     return render(
         request, "approvals/profile.html",
-        {"profile": user_profile, "manager_display": manager_display, "photo_form": photo_form},
+        {
+            "profile": user_profile, "manager_display": manager_display,
+            "photo_form": photo_form, "info_form": info_form,
+        },
     )
 
 

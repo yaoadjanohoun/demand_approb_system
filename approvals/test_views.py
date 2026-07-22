@@ -156,7 +156,9 @@ class ProfilePhotoTests(TestCase):
         user = User.objects.create_user("photo_user", password="x")
         self.client.login(username="photo_user", password="x")
 
-        response = self.client.post("/profil/", {"photo": self._tiny_png()}, follow=True)
+        response = self.client.post(
+            "/profil/", {"action": "update_photo", "photo": self._tiny_png()}, follow=True
+        )
         self.assertEqual(response.status_code, 200)
 
         profile = UserProfile.objects.get(user=user)
@@ -183,7 +185,7 @@ class ProfilePhotoTests(TestCase):
         big_file = SimpleUploadedFile(
             "big.png", b"\x89PNG\r\n\x1a\n" + b"0" * (3 * 1024 * 1024), content_type="image/png"
         )
-        response = self.client.post("/profil/", {"photo": big_file})
+        response = self.client.post("/profil/", {"action": "update_photo", "photo": big_file})
         self.assertEqual(response.status_code, 200)  # ré-affiche le formulaire avec l'erreur
         self.assertFalse(UserProfile.objects.get(user=user).photo)
 
@@ -193,9 +195,59 @@ class ProfilePhotoTests(TestCase):
         user = User.objects.create_user("photo_user4", password="x")
         self.client.login(username="photo_user4", password="x")
         bad_file = SimpleUploadedFile("notes.txt", b"pas une image", content_type="text/plain")
-        response = self.client.post("/profil/", {"photo": bad_file})
+        response = self.client.post("/profil/", {"action": "update_photo", "photo": bad_file})
         self.assertEqual(response.status_code, 200)
         self.assertFalse(UserProfile.objects.get(user=user).photo)
+
+
+class PersonalInfoEditTests(TestCase):
+    """Tout utilisateur doit pouvoir modifier lui-même son nom d'utilisateur,
+    son nom complet et son email (retour client) — le reste (manager,
+    département, site) reste réservé à un admin fonctionnel."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            "employee1", password="x", email="old@example.com", first_name="Old", last_name="Name",
+        )
+        self.client.login(username="employee1", password="x")
+
+    def test_updating_personal_info_saves_changes(self):
+        response = self.client.post("/profil/", {
+            "action": "update_info",
+            "username": "employee1_renamed",
+            "first_name": "New",
+            "last_name": "Name",
+            "email": "new@example.com",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "employee1_renamed")
+        self.assertEqual(self.user.first_name, "New")
+        self.assertEqual(self.user.email, "new@example.com")
+
+    def test_duplicate_username_rejected(self):
+        User.objects.create_user("taken_username", password="x")
+        response = self.client.post("/profil/", {
+            "action": "update_info",
+            "username": "taken_username",
+            "first_name": "Old", "last_name": "Name", "email": "old@example.com",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "employee1")
+
+    def test_manager_department_site_not_editable_via_this_form(self):
+        manager = User.objects.create_user("manager1", password="x")
+        UserProfile.objects.create(user=self.user, manager=manager, department_id=10)
+        response = self.client.post("/profil/", {
+            "action": "update_info",
+            "username": "employee1", "first_name": "Old", "last_name": "Name", "email": "old@example.com",
+            "manager": "", "department_id": "999",
+        })
+        self.assertEqual(response.status_code, 302)
+        profile = UserProfile.objects.get(user=self.user)
+        self.assertEqual(profile.manager_id, manager.id)
+        self.assertEqual(profile.department_id, 10)
 
 
 class DraftRequestTests(TestCase):

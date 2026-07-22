@@ -24,9 +24,6 @@
     </div>
 
     <table>
-        <tr><th>Nom d'utilisateur</th><td>{{ user.username }}</td></tr>
-        <tr><th>Nom complet</th><td>{{ user.get_full_name|default:"—" }}</td></tr>
-        <tr><th>Email</th><td>{{ user.email|default:"—" }}</td></tr>
         <tr><th>Manager</th><td>{{ manager_display }}</td></tr>
         <tr><th>Département</th><td>{{ profile.department_name|default:profile.department_id|default:"—" }}</td></tr>
         <tr><th>Site</th><td>{{ profile.site_name|default:profile.site_id|default:"—" }}</td></tr>
@@ -38,9 +35,20 @@
 </div>
 
 <div class="card">
+    <div class="card-title">Informations personnelles</div>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_info">
+        {{ info_form.as_p }}
+        <button type="submit" class="btn btn-primary" style="margin-top:0.5rem;">Enregistrer</button>
+    </form>
+</div>
+
+<div class="card">
     <div class="card-title">Photo de profil</div>
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
+        <input type="hidden" name="action" value="update_photo">
         {{ photo_form.as_p }}
         <button type="submit" class="btn btn-primary" style="margin-top:0.5rem;">Enregistrer la photo</button>
     </form>

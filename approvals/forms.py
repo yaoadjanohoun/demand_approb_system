@@ -2,14 +2,26 @@
 import datetime
 
 from django import forms
+from django.contrib.auth import get_user_model
 
 from .models import UserProfile
+
+User = get_user_model()
 
 
 class ProfilePhotoForm(forms.ModelForm):
     class Meta:
         model = UserProfile
         fields = ["photo"]
+
+
+class PersonalInfoForm(forms.ModelForm):
+    """Champs qu'un utilisateur peut modifier lui-même (retour client) — le
+    reste (manager, département, site, rôle) reste réservé à un admin."""
+
+    class Meta:
+        model = User
+        fields = ["username", "first_name", "last_name", "email"]
 
 
 FIELD_BUILDERS = {
