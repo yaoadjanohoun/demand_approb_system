@@ -46,6 +46,20 @@ DEBUG = env.bool('DJANGO_DEBUG', default=True)
 
 ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
 
+# HTTPS : la terminaison SSL est gérée par IIS (la DSI configure le certificat
+# sur le binding du site), pas par Django. Ces réglages restent désactivés par
+# défaut (développement local en HTTP) et ne doivent être activés en
+# production que si IIS transmet bien l'en-tête X-Forwarded-Proto — sinon
+# SECURE_SSL_REDIRECT provoquerait une boucle de redirection.
+DJANGO_FORCE_HTTPS = env.bool('DJANGO_FORCE_HTTPS', default=False)
+if DJANGO_FORCE_HTTPS:
+    SECURE_SSL_REDIRECT = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
 
 # Application definition
 
