@@ -14,6 +14,10 @@ MONTH_NAMES_FR = [
     "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
     "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
 ]
+MONTH_ABBR_FR = [
+    "", "Jan", "Fév", "Mar", "Avr", "Mai", "Jun",
+    "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc",
+]
 
 _DURATION_EXPR = ExpressionWrapper(
     F("completed_at") - F("submitted_at"), output_field=DurationField()
@@ -39,6 +43,26 @@ def _with_percentages(rows, key):
     return rows
 
 
+def summary_stats():
+    """Chiffres clés affichés en tête de la page Rapports."""
+    submitted = _submitted_requests()
+    finished = submitted.filter(status__in=[Request.Status.APPROVED, Request.Status.REJECTED])
+    finished_total = finished.count()
+    rejected_total = finished.filter(status=Request.Status.REJECTED).count()
+
+    approved_durations = (
+        submitted.filter(status=Request.Status.APPROVED, completed_at__isnull=False)
+        .annotate(duration=_DURATION_EXPR)
+    )
+    avg_duration = approved_durations.aggregate(avg=Avg("duration"))["avg"]
+
+    return {
+        "total": submitted.count(),
+        "rejection_rate": round(rejected_total / finished_total * 100, 1) if finished_total else None,
+        "avg_hours": _duration_hours(avg_duration),
+    }
+
+
 def volume_by_month():
     rows = (
         _submitted_requests()
@@ -48,10 +72,17 @@ def volume_by_month():
         .order_by("month")
     )
     result = [
-        {"label": f"{MONTH_NAMES_FR[r['month'].month]} {r['month'].year}", "count": r["count"]}
+        {
+            "label": f"{MONTH_NAMES_FR[r['month'].month]} {r['month'].year}",
+            "label_short": f"{MONTH_ABBR_FR[r['month'].month]} {str(r['month'].year)[2:]}",
+            "count": r["count"],
+        }
         for r in rows
     ]
-    return _with_percentages(result, "count")
+    result = _with_percentages(result, "count")
+    for r in result:
+        r["tooltip"] = f"{r['label']} : {r['count']} demande{'s' if r['count'] != 1 else ''}"
+    return result
 
 
 def rejection_rate_by_type():
@@ -76,7 +107,10 @@ def rejection_rate_by_type():
         for r in rows
     ]
     for r in result:
-        r["pct"] = r["rate"]
+        r["label"] = r["name"]
+        r["pct"] = round(r["rate"])  # entier : un float serait localisé ("0,0") et casserait le CSS width
+        r["value_display"] = f"{r['rate']}%"
+        r["tooltip"] = f"{r['name']} : {r['rate']}% ({r['rejected']}/{r['total']} refusées)"
     return result
 
 
@@ -93,7 +127,12 @@ def average_approval_time_by_type():
         {"name": r["request_type__name"], "count": r["count"], "avg_hours": _duration_hours(r["avg_duration"])}
         for r in rows
     ]
-    return _with_percentages(result, "avg_hours")
+    result = _with_percentages(result, "avg_hours")
+    for r in result:
+        r["label"] = r["name"]
+        r["value_display"] = f"{r['avg_hours']} h"
+        r["tooltip"] = f"{r['name']} : {r['avg_hours']} h en moyenne ({r['count']} demande{'s' if r['count'] != 1 else ''})"
+    return result
 
 
 def average_approval_time_by_department():
@@ -113,7 +152,12 @@ def average_approval_time_by_department():
         }
         for r in rows
     ]
-    return _with_percentages(result, "avg_hours")
+    result = _with_percentages(result, "avg_hours")
+    for r in result:
+        r["label"] = r["department"]
+        r["value_display"] = f"{r['avg_hours']} h"
+        r["tooltip"] = f"{r['department']} : {r['avg_hours']} h en moyenne ({r['count']} demande{'s' if r['count'] != 1 else ''})"
+    return result
 
 
 def export_requests_csv():

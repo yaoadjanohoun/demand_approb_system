@@ -368,6 +368,21 @@ class ReportsTests(TestCase):
         )
         return req
 
+    def test_summary_stats_computes_global_figures(self):
+        now = timezone.now()
+        self.make_request(Request.Status.APPROVED, now, now + datetime.timedelta(hours=10))
+        self.make_request(Request.Status.REJECTED, now, now)
+        summary = reports_module.summary_stats()
+        self.assertEqual(summary["total"], 2)
+        self.assertEqual(summary["rejection_rate"], 50.0)
+        self.assertEqual(summary["avg_hours"], 10.0)
+
+    def test_summary_stats_handles_no_data(self):
+        summary = reports_module.summary_stats()
+        self.assertEqual(summary["total"], 0)
+        self.assertIsNone(summary["rejection_rate"])
+        self.assertIsNone(summary["avg_hours"])
+
     def test_volume_by_month_counts_submitted_requests_only(self):
         now = timezone.now()
         self.make_request(Request.Status.APPROVED, now, now)

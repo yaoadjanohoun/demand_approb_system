@@ -372,6 +372,7 @@ def request_return(request, pk):
 @staff_member_required
 def reports(request):
     context = {
+        "summary": reports_module.summary_stats(),
         "volume": reports_module.volume_by_month(),
         "rejection": reports_module.rejection_rate_by_type(),
         "duration_by_type": reports_module.average_approval_time_by_type(),

@@ -1,0 +1,16 @@
+{% if rows %}
+    <div class="chart chart-h">
+        {% for row in rows %}
+            <div class="chart-row" tabindex="0" aria-label="{{ row.tooltip }}">
+                <span class="chart-row-label">{{ row.label }}</span>
+                <div class="chart-row-track">
+                    <div class="chart-row-fill chart-fill-{{ color|default:"accent" }}" style="width: {{ row.pct }}%;"></div>
+                </div>
+                <span class="chart-row-value">{{ row.value_display }}</span>
+                <span class="chart-tooltip" role="tooltip">{{ row.tooltip }}</span>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <p>{{ empty_message|default:"Aucune donnée pour le moment." }}</p>
+{% endif %}

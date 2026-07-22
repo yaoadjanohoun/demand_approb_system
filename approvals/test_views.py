@@ -590,6 +590,36 @@ class NextRequestLinkTests(TestCase):
         self.assertNotContains(response, "card-title\">Suite<")
 
 
+class ReportsPageTests(TestCase):
+    """Retour client : les rapports doivent être présentés sous forme de vrais
+    graphiques (barres), pas de lignes de texte brutes."""
+
+    def test_reports_page_renders_chart_components(self):
+        staff = User.objects.create_user("staff1", password="x", is_staff=True)
+        request_type = RequestType.objects.create(name="Congés", code="LEAVE", form_schema={"fields": []})
+        req = Request.objects.create(
+            request_type=request_type, requester=staff, status=Request.Status.APPROVED,
+        )
+        from django.utils import timezone
+        req.submitted_at = timezone.now()
+        req.completed_at = timezone.now()
+        req.save()
+
+        self.client.login(username="staff1", password="x")
+        response = self.client.get("/rapports/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "chart-v")
+        self.assertContains(response, "chart-row")
+        self.assertContains(response, "stat-grid")
+
+    def test_reports_page_shows_empty_state_without_data(self):
+        staff = User.objects.create_user("staff1", password="x", is_staff=True)
+        self.client.login(username="staff1", password="x")
+        response = self.client.get("/rapports/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Aucune donnée pour le moment.")
+
+
 class LoginRedirectTests(TestCase):
     def test_visiting_login_page_while_authenticated_redirects_to_dashboard(self):
         User.objects.create_user("someone", password="x")

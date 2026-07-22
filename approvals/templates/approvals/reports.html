@@ -9,63 +9,38 @@
     <a class="btn btn-primary" href="{% url 'approvals:reports_export' %}">Exporter les demandes (CSV)</a>
 </div>
 
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="num">{{ summary.total }}</div>
+        <div class="label">Demandes traitées</div>
+    </div>
+    <div class="stat-card">
+        <div class="num">{% if summary.rejection_rate is not None %}{{ summary.rejection_rate }}%{% else %}—{% endif %}</div>
+        <div class="label">Taux de refus global</div>
+    </div>
+    <div class="stat-card">
+        <div class="num">{% if summary.avg_hours is not None %}{{ summary.avg_hours }} h{% else %}—{% endif %}</div>
+        <div class="label">Temps moyen d'approbation</div>
+    </div>
+</div>
+
 <div class="card">
     <h3>Volume de demandes par mois</h3>
-    {% if volume %}
-        {% for row in volume %}
-            <div class="report-row">
-                <span class="report-label">{{ row.label }}</span>
-                <div class="report-bar-track"><div class="report-bar" style="width: {{ row.pct }}%;"></div></div>
-                <span class="report-value">{{ row.count }}</span>
-            </div>
-        {% endfor %}
-    {% else %}
-        <p>Aucune donnée pour le moment.</p>
-    {% endif %}
+    {% include "approvals/_chart_bars_v.html" with rows=volume %}
 </div>
 
 <div class="card">
     <h3>Taux de refus par type de demande</h3>
-    {% if rejection %}
-        {% for row in rejection %}
-            <div class="report-row">
-                <span class="report-label">{{ row.name }}</span>
-                <div class="report-bar-track"><div class="report-bar report-bar-danger" style="width: {{ row.pct }}%;"></div></div>
-                <span class="report-value">{{ row.rate }}% ({{ row.rejected }}/{{ row.total }})</span>
-            </div>
-        {% endfor %}
-    {% else %}
-        <p>Aucune demande traitée (approuvée ou refusée) pour le moment.</p>
-    {% endif %}
+    {% include "approvals/_chart_bars_h.html" with rows=rejection color="danger" empty_message="Aucune demande traitée (approuvée ou refusée) pour le moment." %}
 </div>
 
 <div class="card">
     <h3>Temps moyen d'approbation par type de demande</h3>
-    {% if duration_by_type %}
-        {% for row in duration_by_type %}
-            <div class="report-row">
-                <span class="report-label">{{ row.name }}</span>
-                <div class="report-bar-track"><div class="report-bar" style="width: {{ row.pct }}%;"></div></div>
-                <span class="report-value">{{ row.avg_hours }} h ({{ row.count }} demande{{ row.count|pluralize }})</span>
-            </div>
-        {% endfor %}
-    {% else %}
-        <p>Aucune demande approuvée pour le moment.</p>
-    {% endif %}
+    {% include "approvals/_chart_bars_h.html" with rows=duration_by_type empty_message="Aucune demande approuvée pour le moment." %}
 </div>
 
 <div class="card">
     <h3>Temps moyen d'approbation par département</h3>
-    {% if duration_by_department %}
-        {% for row in duration_by_department %}
-            <div class="report-row">
-                <span class="report-label">Département {{ row.department }}</span>
-                <div class="report-bar-track"><div class="report-bar" style="width: {{ row.pct }}%;"></div></div>
-                <span class="report-value">{{ row.avg_hours }} h ({{ row.count }} demande{{ row.count|pluralize }})</span>
-            </div>
-        {% endfor %}
-    {% else %}
-        <p>Aucune demande approuvée pour le moment.</p>
-    {% endif %}
+    {% include "approvals/_chart_bars_h.html" with rows=duration_by_department empty_message="Aucune demande approuvée pour le moment." %}
 </div>
 {% endblock %}

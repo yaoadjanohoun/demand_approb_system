@@ -1,0 +1,15 @@
+{% if rows %}
+    <div class="chart chart-v">
+        {% for row in rows %}
+            <div class="chart-col" tabindex="0" aria-label="{{ row.tooltip }}">
+                <div class="chart-col-track">
+                    <div class="chart-col-fill" style="height: {{ row.pct }}%;"></div>
+                </div>
+                <span class="chart-col-label">{{ row.label_short }}</span>
+                <span class="chart-tooltip chart-tooltip-v" role="tooltip">{{ row.tooltip }}</span>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <p>{{ empty_message|default:"Aucune donnée pour le moment." }}</p>
+{% endif %}
