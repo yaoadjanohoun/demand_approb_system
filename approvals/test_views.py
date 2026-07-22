@@ -129,6 +129,22 @@ class ProfilePageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(UserProfile.objects.filter(user__username="brand_new_user").exists())
 
+    def test_profile_page_shows_department_and_site_names_not_raw_ids(self):
+        """Retour client : ne pas afficher les identifiants des départements/sites,
+        mais leurs noms."""
+        from .models import Department, Site
+
+        department = Department.objects.create(name="Ventes")
+        site = Site.objects.create(name="Lyon")
+        user = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=user, department=department, site=site)
+        self.client.login(username="employee1", password="x")
+
+        response = self.client.get("/profil/")
+        self.assertContains(response, "Ventes")
+        self.assertContains(response, "Lyon")
+        self.assertNotContains(response, f">{department.id}<")
+
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class ProfilePhotoTests(TestCase):
@@ -237,17 +253,20 @@ class PersonalInfoEditTests(TestCase):
         self.assertEqual(self.user.username, "employee1")
 
     def test_manager_department_site_not_editable_via_this_form(self):
+        from .models import Department
+
         manager = User.objects.create_user("manager1", password="x")
-        UserProfile.objects.create(user=self.user, manager=manager, department_id=10)
+        department = Department.objects.create(name="Ventes")
+        UserProfile.objects.create(user=self.user, manager=manager, department=department)
         response = self.client.post("/profil/", {
             "action": "update_info",
             "username": "employee1", "first_name": "Old", "last_name": "Name", "email": "old@example.com",
-            "manager": "", "department_id": "999",
+            "manager": "", "department": "999",
         })
         self.assertEqual(response.status_code, 302)
         profile = UserProfile.objects.get(user=self.user)
         self.assertEqual(profile.manager_id, manager.id)
-        self.assertEqual(profile.department_id, 10)
+        self.assertEqual(profile.department_id, department.id)
 
 
 class DraftRequestTests(TestCase):

@@ -11,7 +11,8 @@ from unfold.forms import BaseDialogForm
 from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
 from .models import (
-    ApprovalLog, ApprovalRule, Delegation, EmailSettings, Request, RequestAttachment, RequestType, UserProfile,
+    ApprovalLog, ApprovalRule, Delegation, Department, EmailSettings, Request, RequestAttachment,
+    RequestType, Site, UserProfile,
 )
 from .services import RoutingError, WorkflowEngine
 from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSchemaBuilderWidget
@@ -55,15 +56,27 @@ class NamedFieldWidgetMixin:
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 
+@admin.register(Department)
+class DepartmentAdmin(ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
+
+
+@admin.register(Site)
+class SiteAdmin(ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
+
+
 #création du profil admin
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
     list_display = (
         "user", "compte_actif_display", "email_confirmee_display", "manager",
-        "department_id", "department_name", "site_id", "site_name", "country_code",
+        "department", "department_name", "site", "site_name", "country_code",
     )
-    list_filter = ("department_name", "site_name")
-    search_fields = ("user__username", "department_name", "site_name")
+    list_filter = ("department", "site")
+    search_fields = ("user__username", "department__name", "site__name")
     autocomplete_fields = ("user", "manager")
     readonly_fields = ("department_name", "site_name", "last_ad_sync", "email_confirmed_at")
     actions = ["activer_les_comptes"]
@@ -72,9 +85,10 @@ class UserProfileAdmin(ModelAdmin):
         (
             "Utilisées par le moteur de routage",
             {
-                "fields": ("department_id", "site_id"),
+                "fields": ("department", "site"),
                 "description": "Renseignées manuellement par un admin fonctionnel : "
-                "l'annuaire AD ne fournit pas d'identifiant numérique stable pour ces champs.",
+                "l'annuaire AD ne fournit qu'un nom de département/site (ci-dessous), pas la "
+                "référence stable qu'utilisent les règles.",
             },
         ),
         (

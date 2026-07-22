@@ -1,4 +1,4 @@
-"""Rapports et statistiques (Manuel d'Administration §6.2) :
+"""Rapports et statistiques :
 volume de demandes par mois, taux de refus par type, temps moyen
 d'approbation par type et par département.
 """
@@ -101,14 +101,13 @@ def average_approval_time_by_department():
         _submitted_requests()
         .filter(status=Request.Status.APPROVED, completed_at__isnull=False)
         .annotate(duration=_DURATION_EXPR)
-        .values("requester__profile__department_id")
+        .values("requester__profile__department__name")
         .annotate(avg_duration=Avg("duration"), count=Count("id"))
-        .order_by("requester__profile__department_id")
+        .order_by("requester__profile__department__name")
     )
     result = [
         {
-            "department": r["requester__profile__department_id"]
-            if r["requester__profile__department_id"] is not None else "Non renseigné",
+            "department": r["requester__profile__department__name"] or "Non renseigné",
             "count": r["count"],
             "avg_hours": _duration_hours(r["avg_duration"]),
         }
@@ -126,13 +125,13 @@ def export_requests_csv():
         "id", "type", "demandeur", "departement", "statut", "niveau_courant",
         "soumise_le", "terminee_le", "duree_heures",
     ])
-    qs = Request.objects.select_related("request_type", "requester", "requester__profile")
+    qs = Request.objects.select_related("request_type", "requester", "requester__profile", "requester__profile__department")
     for req in qs:
         duration = None
         if req.submitted_at and req.completed_at:
             duration = _duration_hours(req.completed_at - req.submitted_at)
         profile = getattr(req.requester, "profile", None)
-        department = profile.department_id if profile else None
+        department = profile.department.name if profile and profile.department else None
         writer.writerow([
             req.id, req.request_type.code, req.requester.username,
             department if department is not None else "",

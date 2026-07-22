@@ -12,6 +12,8 @@ from django import forms
 from django.contrib.auth.models import Group, User
 from django.utils.safestring import mark_safe
 
+from .models import Department, Site
+
 FIELD_TYPE_CHOICES = [
     ("text", "Texte"),
     ("number", "Nombre entier"),
@@ -24,8 +26,8 @@ FIELD_TYPE_CHOICES = [
 CRITERION_TYPES = [
     ("min_amount", "Montant minimum", "number"),
     ("max_amount", "Montant maximum", "number"),
-    ("department_ids", "Départements (IDs séparés par des virgules)", "text"),
-    ("site_id", "Site (ID)", "number"),
+    ("department_ids", "Départements", "departments"),
+    ("site_id", "Site", "site"),
     ("country_code", "Code pays (2 lettres)", "text"),
 ]
 
@@ -168,6 +170,9 @@ class CriteriaBuilderWidget(forms.Textarea):
         except (TypeError, ValueError):
             initial = {}
 
+        departments = [(d.id, d.name) for d in Department.objects.all()]
+        sites = [(s.id, s.name) for s in Site.objects.all()]
+
         return mark_safe(f"""
 <div class="cb-builder" data-textarea-id="{widget_id}" style="max-width: 640px;">
   <div class="cb-rows"></div>
@@ -178,22 +183,44 @@ class CriteriaBuilderWidget(forms.Textarea):
 <script>
 (function() {{
   const CRITERION_TYPES = {json.dumps(CRITERION_TYPES)};
+  const DEPARTMENTS = {json.dumps(departments)};
+  const SITES = {json.dumps(sites)};
   const container = document.currentScript.previousElementSibling;
   const textarea = document.getElementById("{widget_id}");
   const rowsDiv = container.querySelector(".cb-rows");
   const addBtn = container.querySelector(".cb-add");
 
-  function labelFor(key) {{
-    const found = CRITERION_TYPES.find(function(c) {{ return c[0] === key; }});
-    return found ? found[1] : key;
-  }}
-  function inputTypeFor(key) {{
+  function kindFor(key) {{
     const found = CRITERION_TYPES.find(function(c) {{ return c[0] === key; }});
     return found ? found[2] : "text";
   }}
-  function valueToText(key, val) {{
-    if (key === "department_ids") return Array.isArray(val) ? val.join(", ") : "";
-    return val === undefined || val === null ? "" : String(val);
+
+  function makeValueControl(key, val) {{
+    const kind = kindFor(key);
+    if (kind === "departments" || kind === "site") {{
+      const select = document.createElement("select");
+      select.className = "cb-value";
+      select.dataset.kind = kind;
+      if (kind === "departments") select.multiple = true;
+      const options = kind === "departments" ? DEPARTMENTS : SITES;
+      const selected = kind === "departments" ? (Array.isArray(val) ? val.map(String) : []) : [String(val)];
+      options.forEach(function(opt) {{
+        const o = document.createElement("option");
+        o.value = opt[0];
+        o.textContent = opt[1];
+        if (selected.indexOf(String(opt[0])) !== -1) o.selected = true;
+        select.appendChild(o);
+      }});
+      select.style.flex = "1";
+      return select;
+    }}
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "cb-value";
+    input.dataset.kind = kind;
+    input.style.flex = "1";
+    input.value = val === undefined || val === null ? "" : String(val);
+    return input;
   }}
 
   function makeRow(key, val) {{
@@ -210,13 +237,13 @@ class CriteriaBuilderWidget(forms.Textarea):
       if (c[0] === key) o.selected = true;
       select.appendChild(o);
     }});
+    select.addEventListener("change", function() {{
+      const oldControl = row.querySelector(".cb-value");
+      const newControl = makeValueControl(select.value, null);
+      row.replaceChild(newControl, oldControl);
+    }});
 
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "cb-value";
-    input.style.flex = "1";
-    input.placeholder = key === "department_ids" ? "ex: 10, 12, 15" : "";
-    input.value = valueToText(key, val);
+    const valueControl = makeValueControl(key, val);
 
     const delBtn = document.createElement("button");
     delBtn.type = "button";
@@ -224,7 +251,7 @@ class CriteriaBuilderWidget(forms.Textarea):
     delBtn.onclick = function() {{ row.remove(); }};
 
     row.appendChild(select);
-    row.appendChild(input);
+    row.appendChild(valueControl);
     row.appendChild(delBtn);
     return row;
   }}
@@ -237,22 +264,29 @@ class CriteriaBuilderWidget(forms.Textarea):
   addBtn.addEventListener("click", function() {{
     const used = Array.from(rowsDiv.querySelectorAll(".cb-key")).map(function(s) {{ return s.value; }});
     const free = CRITERION_TYPES.find(function(c) {{ return used.indexOf(c[0]) === -1; }});
-    rowsDiv.appendChild(makeRow(free ? free[0] : CRITERION_TYPES[0][0]));
+    rowsDiv.appendChild(makeRow(free ? free[0] : CRITERION_TYPES[0][0], null));
   }});
 
   function sync() {{
     const criteria = {{}};
     Array.from(rowsDiv.querySelectorAll(".cb-row")).forEach(function(row) {{
       const key = row.querySelector(".cb-key").value;
-      const raw = row.querySelector(".cb-value").value.trim();
-      if (raw === "") return;
-      if (key === "department_ids") {{
-        criteria[key] = raw.split(",").map(function(s) {{ return parseInt(s.trim(), 10); }}).filter(function(n) {{ return !isNaN(n); }});
-      }} else if (key === "min_amount" || key === "max_amount" || key === "site_id") {{
-        const n = Number(raw);
-        if (!isNaN(n)) criteria[key] = n;
+      const control = row.querySelector(".cb-value");
+      const kind = control.dataset.kind;
+      if (kind === "departments") {{
+        const ids = Array.from(control.selectedOptions).map(function(o) {{ return parseInt(o.value, 10); }});
+        if (ids.length) criteria[key] = ids;
+      }} else if (kind === "site") {{
+        if (control.value) criteria[key] = parseInt(control.value, 10);
       }} else {{
-        criteria[key] = raw;
+        const raw = control.value.trim();
+        if (raw === "") return;
+        if (kind === "number") {{
+          const n = Number(raw);
+          if (!isNaN(n)) criteria[key] = n;
+        }} else {{
+          criteria[key] = raw;
+        }}
       }}
     }});
     textarea.value = JSON.stringify(criteria);

@@ -26,6 +26,33 @@ def validate_profile_photo_size(file):
         raise ValidationError(f"La photo ne doit pas dépasser {PROFILE_PHOTO_MAX_SIZE_MB} Mo.")
 
 
+class Department(models.Model):
+    """Département de l'entreprise (retour client : afficher un nom, pas un ID
+    brut). Sert de référentiel pour UserProfile.department et les critères
+    de règles (ApprovalRule.criteria.department_ids, qui restent une liste
+    de PK de Department)."""
+
+    name = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Site(models.Model):
+    """Site géographique de l'entreprise (même logique que Department)."""
+
+    name = models.CharField(max_length=100, unique=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
 class UserProfile(models.Model):
     """Données organisationnelles minimales nécessaires au moteur de routage
     (manager, département, site). En production, ces données proviendront
@@ -42,18 +69,18 @@ class UserProfile(models.Model):
         blank=True,
         related_name="direct_reports",
     )
-    department_id = models.IntegerField(
-        null=True, blank=True,
-        help_text="ID numérique utilisé par les critères de règles (ApprovalRule.criteria.department_ids). "
+    department = models.ForeignKey(
+        Department, on_delete=models.SET_NULL, null=True, blank=True, related_name="members",
+        help_text="Utilisé par les critères de règles (ApprovalRule.criteria.department_ids). "
         "À renseigner manuellement par un admin fonctionnel : l'annuaire AD ne fournit qu'un nom "
-        "de département (department_name), pas d'identifiant numérique stable.",
+        "de département (department_name), pas d'identifiant stable.",
     )
-    site_id = models.IntegerField(null=True, blank=True)
+    site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True, related_name="members")
     country_code = models.CharField(max_length=2, null=True, blank=True)
 
     # Champs informatifs synchronisés depuis Active Directory à la connexion
     # (voir approvals/auth_backends.py). Non utilisés par le moteur de routage
-    # (qui s'appuie sur department_id/site_id, configurés par un admin fonctionnel) :
+    # (qui s'appuie sur department/site, configurés par un admin fonctionnel) :
     # ils servent de repère pour faire ce mapping, pas de source de vérité pour les règles.
     department_name = models.CharField(max_length=100, null=True, blank=True)
     site_name = models.CharField(max_length=100, null=True, blank=True)

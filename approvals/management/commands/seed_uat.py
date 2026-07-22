@@ -18,8 +18,10 @@ from approvals.models import (
     ApprovalLog,
     ApprovalRule,
     Delegation,
+    Department,
     Request,
     RequestType,
+    Site,
     UserProfile,
 )
 
@@ -48,12 +50,19 @@ class Command(BaseCommand):
         )
         admin_fonctionnel.groups.add(group_admins_fonctionnels)
 
-        managed_models = (RequestType, ApprovalRule, Delegation, UserProfile)
+        managed_models = (RequestType, ApprovalRule, Delegation, UserProfile, Department, Site)
         for model in managed_models:
             ct = ContentType.objects.get_for_model(model)
             perms = Permission.objects.filter(content_type=ct)
             admin_fonctionnel.user_permissions.add(*perms)
             group_admins_fonctionnels.permissions.add(*perms)
+
+        # Retour client : l'admin fonctionnel doit pouvoir créer ses propres groupes
+        # (ex: un "Comité de vente" scopé à son département) sans dépendre du super admin.
+        group_ct = ContentType.objects.get_for_model(Group)
+        group_perms = Permission.objects.filter(content_type=group_ct)
+        admin_fonctionnel.user_permissions.add(*group_perms)
+        group_admins_fonctionnels.permissions.add(*group_perms)
         for model in (Request, ApprovalLog):
             ct = ContentType.objects.get_for_model(model)
             view_perms = Permission.objects.filter(content_type=ct, codename__startswith="view_")
@@ -76,15 +85,20 @@ class Command(BaseCommand):
         comite, _ = Group.objects.get_or_create(name="Comite de direction")
         comite.user_set.add(director1, director1_delegate)
 
+        dept_ventes, _ = Department.objects.get_or_create(name="Ventes")
+        dept_marketing, _ = Department.objects.get_or_create(name="Marketing")
+        site_paris, _ = Site.objects.get_or_create(name="Paris")
+        site_lyon, _ = Site.objects.get_or_create(name="Lyon")
+
         UserProfile.objects.update_or_create(
             user=employee1,
-            defaults={"manager": manager1, "department_id": 10, "site_id": 1, "country_code": "FR"},
+            defaults={"manager": manager1, "department": dept_ventes, "site": site_paris, "country_code": "FR"},
         )
         UserProfile.objects.update_or_create(
             user=employee2,
-            defaults={"manager": manager1, "department_id": 20, "site_id": 2, "country_code": "FR"},
+            defaults={"manager": manager1, "department": dept_marketing, "site": site_lyon, "country_code": "FR"},
         )
-        UserProfile.objects.update_or_create(user=manager1, defaults={"manager": director1, "department_id": 10})
+        UserProfile.objects.update_or_create(user=manager1, defaults={"manager": director1, "department": dept_ventes})
 
         Delegation.objects.update_or_create(
             delegator=director1, delegate=director1_delegate,
@@ -148,7 +162,7 @@ class Command(BaseCommand):
         # Conflit volontaire : deux règles actives au même niveau (démonstration
         # de la résolution par spécificité, cf. ApprovalRuleAdmin "Conflit potentiel").
         ApprovalRule.objects.update_or_create(
-            request_type=rt_purchase, level=1, criteria={"department_ids": [10]},
+            request_type=rt_purchase, level=1, criteria={"department_ids": [dept_ventes.id]},
             defaults={"approvers_config": {"type": "group", "group_id": comite.id}, "created_by": admin},
         )
         ApprovalRule.objects.update_or_create(

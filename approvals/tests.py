@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from . import reports as reports_module
-from .models import ApprovalLog, ApprovalRule, Delegation, Request, RequestType, UserProfile
+from .models import ApprovalLog, ApprovalRule, Delegation, Department, Request, RequestType, Site, UserProfile
 from .services import RoutingError, WorkflowEngine
 
 
@@ -16,7 +16,9 @@ class WorkflowEngineTests(TestCase):
         self.director = User.objects.create_user("director1", password="x")
         self.director_delegate = User.objects.create_user("director1_delegate", password="x")
         self.employee = User.objects.create_user("employee1", password="x")
-        UserProfile.objects.create(user=self.employee, manager=self.manager, department_id=10, site_id=1)
+        department = Department.objects.create(name="IT")
+        site = Site.objects.create(name="Paris")
+        UserProfile.objects.create(user=self.employee, manager=self.manager, department=department, site=site)
 
         self.request_type = RequestType.objects.create(
             name="Achat Fournisseur IT",
@@ -230,8 +232,10 @@ class ConflictAndPriorityTests(TestCase):
         self.manager_a = User.objects.create_user("approver_a", password="x")
         self.manager_b = User.objects.create_user("approver_b", password="x")
         self.employee = User.objects.create_user("employee1", password="x")
+        self.department = Department.objects.create(name="Ventes")
+        self.site = Site.objects.create(name="Paris")
         UserProfile.objects.create(
-            user=self.employee, department_id=10, site_id=1, country_code="FR"
+            user=self.employee, department=self.department, site=self.site, country_code="FR"
         )
         self.request_type = RequestType.objects.create(
             name="Achat", code="PURCHASE",
@@ -273,7 +277,7 @@ class ConflictAndPriorityTests(TestCase):
         )
         ApprovalRule.objects.create(
             request_type=self.request_type, level=1,
-            criteria={"department_ids": [10]}, approvers_config={"type": "user", "user_id": self.manager_b.id},
+            criteria={"department_ids": [self.department.id]}, approvers_config={"type": "user", "user_id": self.manager_b.id},
         )
         request = self.make_request()
         WorkflowEngine(request).submit(actor=self.employee)
@@ -285,7 +289,7 @@ class ConflictAndPriorityTests(TestCase):
     def test_tie_is_broken_by_most_recently_updated_and_recorded(self):
         rule_site = ApprovalRule.objects.create(
             request_type=self.request_type, level=1,
-            criteria={"site_id": 1}, approvers_config={"type": "user", "user_id": self.manager_a.id},
+            criteria={"site_id": self.site.id}, approvers_config={"type": "user", "user_id": self.manager_a.id},
         )
         rule_country = ApprovalRule.objects.create(
             request_type=self.request_type, level=1,
@@ -332,7 +336,8 @@ class ReportsTests(TestCase):
 
     def setUp(self):
         self.employee = User.objects.create_user("employee1", password="x")
-        UserProfile.objects.create(user=self.employee, department_id=10)
+        self.department = Department.objects.create(name="Ventes")
+        UserProfile.objects.create(user=self.employee, department=self.department)
         self.request_type = RequestType.objects.create(
             name="Note de frais", code="EXPENSE",
             form_schema={"fields": [{"name": "montant", "type": "decimal", "required": True}]},
@@ -376,7 +381,7 @@ class ReportsTests(TestCase):
         self.assertEqual(by_type[0]["count"], 2)
 
         by_department = reports_module.average_approval_time_by_department()
-        self.assertEqual(by_department[0]["department"], 10)
+        self.assertEqual(by_department[0]["department"], "Ventes")
         self.assertEqual(by_department[0]["avg_hours"], 15.0)
 
     def test_export_requests_csv_includes_all_requests(self):

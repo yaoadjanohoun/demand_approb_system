@@ -25,8 +25,8 @@
 
     <table>
         <tr><th>Manager</th><td>{{ manager_display }}</td></tr>
-        <tr><th>Département</th><td>{{ profile.department_name|default:profile.department_id|default:"—" }}</td></tr>
-        <tr><th>Site</th><td>{{ profile.site_name|default:profile.site_id|default:"—" }}</td></tr>
+        <tr><th>Département</th><td>{{ profile.department.name|default:profile.department_name|default:"—" }}</td></tr>
+        <tr><th>Site</th><td>{{ profile.site.name|default:profile.site_name|default:"—" }}</td></tr>
     </table>
     <p class="card-note">
         Ces informations proviennent de l'annuaire de l'entreprise (Active Directory) ou ont été
