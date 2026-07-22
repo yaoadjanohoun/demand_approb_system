@@ -25,9 +25,11 @@ logs/
 .DS_Store
 Thumbs.db
 
-#files
+#files (documents de projet à la racine uniquement — ne doit pas exclure les
+# fichiers .txt utilisés par l'application elle-même, ex: les templates
+# d'email Django dans approvals/templates/)
 
-*.txt
+/*.txt
 !requirements.txt
 
 .claude/
