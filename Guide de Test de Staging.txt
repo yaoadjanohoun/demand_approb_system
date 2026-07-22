@@ -1,0 +1,53 @@
+Guide de Test de Staging — Système de Demandes et d'Approbation
+Ce document est destiné à la DSI. Il décrit comment valider le déploiement complet (IIS + SQL Server + Active Directory) sur un environnement de staging, avant la mise en production. Ces trois points n'ont pas pu être testés depuis le poste de développement (aucun accès à cette infrastructure) — voir TEST_RESULTS.md.
+
+1. Objectif
+Rejouer les scénarios fonctionnels déjà validés en développement (SQLite, authentification locale), mais cette fois en conditions réelles : IIS, SQL Server, annuaire Active Directory. L'objectif n'est pas de retester la logique métier (déjà couverte par les 116 tests automatisés, voir TEST_RESULTS.md), mais de vérifier que le déploiement lui-même fonctionne : connexion aux services externes, permissions systèmes, configuration réseau.
+
+2. Prérequis avant de commencer
+Un serveur de staging séparé de la production, avec :
+- IIS installé, module HttpPlatformHandler activé (voir web.config).
+- Un accès réseau à une instance SQL Server de test (pas celle de production).
+- Un accès réseau à un annuaire Active Directory de test, ou à défaut une unité d'organisation (OU) de test dans l'AD réel, avec 2-3 comptes de test dédiés (ne jamais tester avec des comptes de production réels).
+- Le code source déployé depuis la branche/tag à mettre en production (voir README.md et INSTALL.md, section 6, pour les étapes de déploiement).
+
+3. Test 1 — IIS et HttpPlatformHandler
+3.1. Vérifier que le site répond
+Ouvrir l'URL du site de staging dans un navigateur. La page de connexion doit s'afficher avec le style correct (CSS chargé) — si le style est absent, vérifier que `collectstatic` a été lancé (voir INSTALL.md §6, étape 5) et que WHITENOISE_USE_FINDERS n'a pas été mis à False sans collectstatic préalable.
+3.2. Vérifier les logs
+Consulter le fichier de log défini par `stdoutLogFile` dans web.config, puis les logs applicatifs Django (voir LOGGING dans settings.py — chemin `%APPDATA%\demand_approb_system_main\Logs` par défaut). Confirmer qu'aucune erreur de démarrage n'apparaît.
+3.3. Vérifier le redémarrage du pool d'applications
+Redémarrer le pool d'applications IIS et confirmer que le site revient en ligne automatiquement sans intervention manuelle.
+3.4. HTTPS (si applicable)
+Si IIS termine le SSL sur ce site, activer `DJANGO_FORCE_HTTPS=True` dans la configuration et vérifier :
+- Qu'une requête HTTP est bien redirigée vers HTTPS (pas de boucle de redirection — signe que l'en-tête X-Forwarded-Proto n'est pas transmis correctement par IIS).
+- Que la connexion fonctionne normalement une fois sur HTTPS.
+
+4. Test 2 — SQL Server
+4.1. Bascule de base de données
+Renseigner SQLSERVER_HOST (et les autres variables SQLSERVER_*) dans la configuration de staging. Confirmer que l'application démarre sans erreur de connexion.
+4.2. Migrations
+Lancer `python manage.py migrate` contre cette base SQL Server. Vérifier qu'aucune erreur n'apparaît et que les tables sont créées (comparer avec le schéma SQLite de développement si besoin — voir Dictionnaire de Données.txt).
+4.3. Rejouer les scénarios fonctionnels de base
+Avec `python manage.py seed_uat`, recréer le jeu de données de démonstration, puis rejouer au moins :
+- Soumission d'une demande à un niveau, puis à deux niveaux (voir Checklist_Revue_Globale.docx, section 2-4).
+- Une décision d'approbation, un refus, un retour pour information.
+- Vérifier dans SQL Server Management Studio (ou équivalent) que les lignes sont bien écrites dans les tables `approvals_request` et `approvals_approvallog`.
+
+5. Test 3 — Active Directory
+5.1. Connexion avec un compte AD
+Avec AD_LDAP_SERVER_URI et les autres variables AD_LDAP_* renseignées, se connecter avec un compte de test de l'annuaire. Vérifier que la connexion réussit sans mot de passe local (voir approvals/auth_backends.py — aucun mot de passe n'est stocké côté application pour les comptes AD).
+5.2. Synchronisation du profil
+Vérifier que le département et le site du compte AD apparaissent bien dans la page profil de l'utilisateur (champs "synchronisés depuis Active Directory", en lecture seule — voir Manuel d'Administration Fonctionnel.txt).
+5.3. Manager
+Si le compte de test AD a un manager renseigné dans l'annuaire, vérifier qu'il est bien lié automatiquement (uniquement si ce manager a déjà un compte dans l'application — voir approvals/test_ldap.py pour le comportement attendu si ce n'est pas le cas).
+5.4. Comptes désactivés
+Désactiver un compte de test dans l'AD et vérifier qu'il ne peut plus se connecter à l'application.
+
+6. Test 4 — Bout en bout
+Une fois les trois points ci-dessus validés séparément, rejouer entièrement la Checklist_Revue_Globale.docx (sections 1 à 9) sur ce serveur de staging, avec des comptes AD réels et une base SQL Server réelle, pour confirmer que rien ne diffère du comportement validé en développement.
+
+7. Avant la mise en production
+- Consigner les résultats de ce guide (ce qui a été testé, ce qui a échoué, les correctifs appliqués).
+- Ne jamais copier la base de staging vers la production sans validation préalable des données de test qu'elle contient (comptes, demandes de démonstration).
+- Retirer ou désactiver les comptes de test créés pour cette validation avant la bascule en production.

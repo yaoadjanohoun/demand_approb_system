@@ -54,6 +54,7 @@ Voir [`TEST_RESULTS.md`](TEST_RESULTS.md) pour un dernier relevé d'exécution.
 |---|---|
 | [`Manuel d'Administration Fonctionnel.txt`](Manuel%20d'Administration%20Fonctionnel.txt) | Guide de l'admin fonctionnel (configuration des types de demande, règles, délégations) |
 | [`Les Spécifications Techniques.txt`](Les%20Spécifications%20Techniques.txt) | Architecture, contraintes de déploiement, choix techniques |
+| [`Guide de Test de Staging.txt`](Guide%20de%20Test%20de%20Staging.txt) | Pour la DSI : valider IIS/SQL Server/Active Directory en conditions réelles avant mise en production |
 | [`Diagrammes de Flux.txt`](Diagrammes%20de%20Flux.txt) | Circuits de soumission/approbation |
 | [`Dictionnaire de Données.txt`](Dictionnaire%20de%20Données.txt) | Modèle de données |
 | [`Matrice de Traçabilité.txt`](Matrice%20de%20Traçabilité.txt) | Exigences ↔ implémentation |
