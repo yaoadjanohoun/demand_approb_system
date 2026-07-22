@@ -50,7 +50,13 @@ class NamedFieldWidgetMixin:
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name in self.field_widgets:
-            kwargs["widget"] = self.field_widgets[db_field.name]
+            widget_cls = self.field_widgets[db_field.name]
+            try:
+                # Certains widgets (ex: ApproversConfigBuilderWidget) ont besoin de la
+                # requête pour scoper leurs choix à l'admin connecté ; les autres l'ignorent.
+                kwargs["widget"] = widget_cls(request=request)
+            except TypeError:
+                kwargs["widget"] = widget_cls
         elif isinstance(db_field, models.JSONField):
             kwargs["widget"] = JSONEditorWidget
         return super().formfield_for_dbfield(db_field, request, **kwargs)

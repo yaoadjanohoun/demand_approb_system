@@ -308,6 +308,22 @@ APPROVER_TYPE_CHOICES = [
 ]
 
 
+def _scoped_department_id(request):
+    """ID du département auquel un admin est restreint dans les listes
+    déroulantes d'utilisateurs, ou None si non restreint.
+
+    Retour client : la portée est déterminée par le département du profil de
+    l'admin lui-même — un super admin, ou un admin sans département assigné
+    (ex: l'admin fonctionnel principal), reste non restreint ; un admin dont
+    le profil a un département (ex: membre d'un groupe "Comité de vente" créé
+    pour son équipe) ne voit que les utilisateurs de ce département.
+    """
+    if request is None or request.user.is_superuser:
+        return None
+    profile = getattr(request.user, "profile", None)
+    return profile.department_id if profile else None
+
+
 class ApproversConfigBuilderWidget(forms.Textarea):
     """Constructeur visuel pour ApprovalRule.approvers_config.
 
@@ -317,6 +333,10 @@ class ApproversConfigBuilderWidget(forms.Textarea):
     (voir WorkflowEngine._resolve_approvers).
     """
 
+    def __init__(self, request=None, attrs=None):
+        self.request = request
+        super().__init__(attrs)
+
     def render(self, name, value, attrs=None, renderer=None):
         textarea_html = super().render(name, value, attrs, renderer)
         widget_id = (attrs or {}).get("id", f"id_{name}")
@@ -325,7 +345,11 @@ class ApproversConfigBuilderWidget(forms.Textarea):
         except (TypeError, ValueError):
             initial = {}
 
-        users = [(u.id, u.get_full_name() or u.username) for u in User.objects.filter(is_active=True).order_by("username")]
+        users_qs = User.objects.filter(is_active=True)
+        department_id = _scoped_department_id(self.request)
+        if department_id is not None:
+            users_qs = users_qs.filter(profile__department_id=department_id)
+        users = [(u.id, u.get_full_name() or u.username) for u in users_qs.order_by("username")]
         groups = [(g.id, g.name) for g in Group.objects.order_by("name")]
 
         return mark_safe(f"""
