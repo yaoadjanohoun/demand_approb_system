@@ -85,7 +85,10 @@ ROOT_URLCONF = 'demand_approb_system_main.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        # Prioritaire sur les templates fournis par les apps (unfold, django admin) :
+        # nécessaire pour surcharger admin/index.html avec le tableau de bord admin,
+        # 'unfold' précédant 'approvals' dans INSTALLED_APPS (voir commentaire plus bas).
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -297,9 +300,21 @@ UNFOLD = {
     "LOGIN": {
         "image": None,
     },
+    # Alimente le tableau de bord admin (page d'accueil /admin/) avec des
+    # statistiques et des graphiques, comme le tableau de bord côté client.
+    "DASHBOARD_CALLBACK": "approvals.admin_dashboard.dashboard_callback",
     "SIDEBAR": {
         "show_search": True,
         "navigation": [
+            {
+                "items": [
+                    {
+                        "title": "Tableau de bord",
+                        "icon": "dashboard",
+                        "link": reverse_lazy("admin:index"),
+                    },
+                ],
+            },
             {
                 "title": "Configuration des demandes",
                 "separator": True,
@@ -350,6 +365,16 @@ UNFOLD = {
                         "title": "Profils utilisateur",
                         "icon": "badge",
                         "link": reverse_lazy("admin:approvals_userprofile_changelist"),
+                    },
+                    {
+                        "title": "Départements",
+                        "icon": "apartment",
+                        "link": reverse_lazy("admin:approvals_department_changelist"),
+                    },
+                    {
+                        "title": "Sites",
+                        "icon": "location_on",
+                        "link": reverse_lazy("admin:approvals_site_changelist"),
                     },
                     {
                         "title": "Utilisateurs",

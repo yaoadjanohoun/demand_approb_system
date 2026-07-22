@@ -1,0 +1,119 @@
+{% extends 'admin/base.html' %}
+{% load i18n unfold %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+    {% include "unfold/helpers/site_branding.html" %}
+{% endblock %}
+
+{% block content %}
+{% component "unfold/components/title.html" with class="mb-4" %}Vue d'ensemble{% endcomponent %}
+
+<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+    {% component "unfold/components/card.html" %}
+        <div class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{{ admin_counts.pending_requests }}</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Demandes en attente</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" %}
+        <div class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{{ admin_summary.total }}</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Demandes traitées</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" %}
+        <div class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{% if admin_summary.rejection_rate is not None %}{{ admin_summary.rejection_rate }}%{% else %}—{% endif %}</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Taux de refus global</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" %}
+        <div class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{% if admin_summary.avg_hours is not None %}{{ admin_summary.avg_hours }} h{% else %}—{% endif %}</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Temps moyen d'approbation</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" %}
+        <div class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{{ admin_counts.active_users }}</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Utilisateurs actifs</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" %}
+        <div class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{{ admin_counts.active_request_types }}</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Types de demande actifs</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" %}
+        <div class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{{ admin_counts.groups }}</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Groupes</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" %}
+        <div class="text-2xl font-semibold text-font-important-light dark:text-font-important-dark">{{ admin_counts.active_delegations }}</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Délégations actives</div>
+    {% endcomponent %}
+</div>
+
+{% component "unfold/components/title.html" with class="mb-4" %}Accès rapide{% endcomponent %}
+<div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
+    {% component "unfold/components/card.html" with href=requesttype_url icon="description" %}
+        <div class="font-medium text-font-important-light dark:text-font-important-dark">Types de demandes</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Formulaires et champs proposés</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" with href=approvalrule_url icon="rule" %}
+        <div class="font-medium text-font-important-light dark:text-font-important-dark">Règles d'approbation</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Qui approuve quoi, à quel niveau</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" with href=department_url icon="apartment" %}
+        <div class="font-medium text-font-important-light dark:text-font-important-dark">Départements</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Référentiel utilisé par les règles</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" with href=site_url icon="location_on" %}
+        <div class="font-medium text-font-important-light dark:text-font-important-dark">Sites</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Référentiel utilisé par les règles</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" with href=group_url icon="groups" %}
+        <div class="font-medium text-font-important-light dark:text-font-important-dark">Groupes</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Créer et organiser des groupes</div>
+    {% endcomponent %}
+    {% component "unfold/components/card.html" with href=reports_url icon="monitoring" %}
+        <div class="font-medium text-font-important-light dark:text-font-important-dark">Rapports détaillés</div>
+        <div class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Statistiques complètes, export CSV</div>
+    {% endcomponent %}
+</div>
+
+{% component "unfold/components/title.html" with class="mb-4" %}Volume de demandes par mois{% endcomponent %}
+{% component "unfold/components/card.html" with class="mb-8" %}
+    {% if admin_has_volume %}
+        {% component "unfold/components/chart/bar.html" with data=admin_chart_volume height=220 %}{% endcomponent %}
+    {% else %}
+        <p class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Aucune donnée pour le moment.</p>
+    {% endif %}
+{% endcomponent %}
+
+{% component "unfold/components/title.html" with class="mb-4" %}Taux de refus par type de demande{% endcomponent %}
+{% component "unfold/components/card.html" with class="mb-8" %}
+    {% if admin_has_rejection %}
+        {% component "unfold/components/chart/bar.html" with data=admin_chart_rejection height=220 %}{% endcomponent %}
+    {% else %}
+        <p class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Aucune demande traitée pour le moment.</p>
+    {% endif %}
+{% endcomponent %}
+
+{% component "unfold/components/title.html" with class="mb-4" %}Temps moyen d'approbation par type{% endcomponent %}
+{% component "unfold/components/card.html" with class="mb-8" %}
+    {% if admin_has_duration_type %}
+        {% component "unfold/components/chart/bar.html" with data=admin_chart_duration_type height=220 %}{% endcomponent %}
+    {% else %}
+        <p class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Aucune demande approuvée pour le moment.</p>
+    {% endif %}
+{% endcomponent %}
+
+{% component "unfold/components/title.html" with class="mb-4" %}Temps moyen d'approbation par département{% endcomponent %}
+{% component "unfold/components/card.html" with class="mb-8" %}
+    {% if admin_has_duration_department %}
+        {% component "unfold/components/chart/bar.html" with data=admin_chart_duration_department height=220 %}{% endcomponent %}
+    {% else %}
+        <p class="text-font-subtle-light dark:text-font-subtle-dark text-sm">Aucune demande approuvée pour le moment.</p>
+    {% endif %}
+{% endcomponent %}
+
+<div class="flex flex-col lg:flex-row lg:gap-8">
+    <div class="grow">
+        {% include "unfold/helpers/app_list_default.html" %}
+    </div>
+
+    {% include "unfold/helpers/history.html" %}
+</div>
+{% endblock %}

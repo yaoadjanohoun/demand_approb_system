@@ -110,6 +110,77 @@ class SeedUatGroupPermissionTests(TestCase):
         for perm in group_ct_perms:
             self.assertTrue(admin_fonctionnel.has_perm(f"auth.{perm.codename}"))
 
+    def test_group_changelist_shows_add_button_for_superuser(self):
+        """Bug relevé en revue client (superuser sans bouton "Ajouter" sur
+        Groupes) : django.contrib.auth enregistre Group/User avec le
+        ModelAdmin Django brut, qui n'a pas l'attribut show_add_link
+        qu'Unfold exige pour afficher ce bouton — indépendamment de toute
+        permission. Group/User doivent être ré-enregistrés avec le
+        ModelAdmin d'Unfold pour que le bouton apparaisse."""
+        superuser = User.objects.create_superuser("root3", password="x")
+        self.client.force_login(superuser)
+        response = self.client.get("/admin/auth/group/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "addlink")
+        self.assertContains(response, "/admin/auth/group/add/")
+
+    def test_user_changelist_shows_add_button_for_superuser(self):
+        superuser = User.objects.create_superuser("root4", password="x")
+        self.client.force_login(superuser)
+        response = self.client.get("/admin/auth/user/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "addlink")
+
+    def test_seed_uat_group_permission_grant_reflected_on_group_object(self):
+        call_command("seed_uat")
+        group_ct_perms = Permission.objects.filter(content_type__app_label="auth", content_type__model="group")
         group = Group.objects.get(name="Admins fonctionnels")
         for perm in group_ct_perms:
             self.assertIn(perm, group.permissions.all())
+
+    def test_admin_fonctionnel_can_reach_group_add_page(self):
+        """Vérification bout en bout du retour client "je ne peux pas créer
+        de groupe" : la page d'ajout doit être accessible avec les permissions
+        posées par seed_uat, pas seulement les permissions en base."""
+        call_command("seed_uat")
+        self.client.login(username="admin_fonctionnel", password="AdminFonc!2026")
+        response = self.client.get("/admin/auth/group/add/")
+        self.assertEqual(response.status_code, 200)
+
+
+class AdminDashboardTests(TestCase):
+    """Retour client : un tableau de bord pour l'administrateur, comme celui
+    des utilisateurs, avec des graphiques — et les nouveaux modèles
+    (Department, Site) doivent apparaître dans la navigation de l'admin."""
+
+    def test_dashboard_renders_stats_and_charts_for_superuser(self):
+        from django.utils import timezone
+
+        from .models import Request, RequestType
+
+        superuser = User.objects.create_superuser("root", password="x")
+        request_type = RequestType.objects.create(name="Congés", code="LEAVE", form_schema={"fields": []})
+        now = timezone.now()
+        Request.objects.create(
+            request_type=request_type, requester=superuser, status=Request.Status.APPROVED,
+            submitted_at=now, completed_at=now,
+        )
+        self.client.force_login(superuser)
+        response = self.client.get("/admin/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Vue d'ensemble")
+        self.assertContains(response, "Accès rapide")
+        self.assertContains(response, 'data-type="bar"')
+        self.assertContains(response, "Tableau de bord")
+
+    def test_dashboard_reachable_for_staff_admin(self):
+        staff = User.objects.create_user("staff1", password="x", is_staff=True)
+        self.client.login(username="staff1", password="x")
+        response = self.client.get("/admin/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_department_and_site_admin_pages_reachable(self):
+        superuser = User.objects.create_superuser("root2", password="x")
+        self.client.force_login(superuser)
+        self.assertEqual(self.client.get("/admin/approvals/department/").status_code, 200)
+        self.assertEqual(self.client.get("/admin/approvals/site/").status_code, 200)

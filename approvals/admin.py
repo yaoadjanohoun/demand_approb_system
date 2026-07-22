@@ -1,13 +1,14 @@
 from django import forms
 from django.contrib import admin, messages
-from django.contrib.auth.models import User
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin, UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import Group, User
 from django.db import models
 from django.shortcuts import redirect
 from django.urls import reverse
 from django_json_widget.widgets import JSONEditorWidget
 from unfold.admin import ModelAdmin
 from unfold.decorators import action, display
-from unfold.forms import BaseDialogForm
+from unfold.forms import AdminPasswordChangeForm, BaseDialogForm, UserChangeForm, UserCreationForm
 from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
 from .models import (
@@ -21,6 +22,27 @@ from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSc
 admin.site.site_header = "Système de Demandes et d'Approbation — Administration"
 admin.site.site_title = "Système de Demandes et d'Approbation"
 admin.site.index_title = "Tableau de bord de l'Administration"
+
+# django.contrib.auth enregistre User/Group avec le ModelAdmin Django brut, qui
+# n'a pas les attributs propres à Unfold (ex: show_add_link) : le bouton
+# "Ajouter" et une partie du chrome restaient alors invisibles même pour un
+# superuser, sans lien avec les permissions (bug relevé en revue client).
+# On les ré-enregistre avec le ModelAdmin d'Unfold, en gardant la logique
+# métier (fieldsets, formulaires) de Django.
+admin.site.unregister(Group)
+admin.site.unregister(User)
+
+
+@admin.register(Group)
+class GroupAdmin(BaseGroupAdmin, ModelAdmin):
+    pass
+
+
+@admin.register(User)
+class UserAdmin(BaseUserAdmin, ModelAdmin):
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
 
 STATUS_LABELS = {
     "Brouillon": "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100",
@@ -209,8 +231,7 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
     @display(description="Règle par défaut (dernier niveau)", boolean=True)
     def default_rule_display(self, obj):
         """Signale l'absence de règle "par défaut" (sans condition) au dernier
-        niveau d'approbation actif — recommandation du Manuel d'Administration
-        §4.3 pour éviter que des demandes non couvertes par les règles
+        niveau d'approbation actif —  pour éviter que des demandes non couvertes par les règles
         spécifiques ne sautent silencieusement ce niveau."""
         active_rules = list(obj.approval_rules.filter(is_active=True))
         if not active_rules:
@@ -386,7 +407,7 @@ class RequestAdmin(JSONWidgetMixin, ModelAdmin):
         return redirect(change_url)
 
 
-#creation de modèle de création de délégation par un admin.
+# création de délégation par un admin.
 @admin.register(Delegation)
 class DelegationAdmin(ModelAdmin):
     list_display = ("delegator", "delegate", "start_date", "end_date", "is_active_display", "scope")
