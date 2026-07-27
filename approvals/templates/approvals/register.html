@@ -6,8 +6,21 @@
     <form method="post">
         {% csrf_token %}
         {{ form.as_p }}
+        <div class="checkbox-row">
+            <input type="checkbox" id="toggle-password">
+            <label for="toggle-password">Afficher le mot de passe</label>
+        </div>
         <button type="submit" class="btn btn-primary" style="margin-top:1rem; width:100%; justify-content:center;">S'inscrire</button>
     </form>
+    <script>
+        document.getElementById('toggle-password').addEventListener('change', function () {
+            var type = this.checked ? 'text' : 'password';
+            var pwd = document.getElementById('id_password');
+            var pwdConfirm = document.getElementById('id_password_confirm');
+            if (pwd) pwd.type = type;
+            if (pwdConfirm) pwdConfirm.type = type;
+        });
+    </script>
     <p class="card-note">
         Après inscription, un email de confirmation vous sera envoyé. Une fois votre adresse
         confirmée, un administrateur devra encore activer votre compte avant que tu puisses

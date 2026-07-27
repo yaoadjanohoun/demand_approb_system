@@ -3,8 +3,16 @@
 {% block guest_content %}
 <div class="card">
     <h1>Confirmer votre connexion</h1>
-    <p>Un lien de connexion a été envoyé à <strong>{{ email }}</strong>.</p>
-    <p>Cliquez dessus dans les 15 minutes pour finaliser votre connexion.</p>
-    <p><a href="{% url 'login' %}">Retour à la connexion</a></p>
+    <p>Un code de confirmation a été envoyé à <strong>{{ email }}</strong>.</p>
+    <p class="card-note">Saisis-le ci-dessous (valable 15 minutes).</p>
+    <form method="post" action="{% url 'approvals:confirm_login_code' %}">
+        {% csrf_token %}
+        <label for="id_code">Code de confirmation</label>
+        <input type="text" id="id_code" name="code" inputmode="numeric" pattern="[0-9]{9}" maxlength="9"
+               autocomplete="one-time-code" autofocus required
+               style="letter-spacing: 0.3em; font-size: 1.1rem; text-align: center;">
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem; width:100%; justify-content:center;">Confirmer</button>
+    </form>
+    <p class="card-note" style="text-align:center; margin-top:1rem;"><a href="{% url 'login' %}">Retour à la connexion</a></p>
 </div>
 {% endblock %}

@@ -33,6 +33,11 @@ class RegistrationFlowTests(TestCase):
     def setUp(self):
         self.client = Client()
 
+    def test_registration_page_offers_show_password_toggle(self):
+        response = self.client.get("/inscription/")
+        self.assertContains(response, 'id="toggle-password"')
+        self.assertContains(response, "id_password_confirm")
+
     def test_registration_creates_inactive_user_and_sends_confirmation_email(self):
         response = self.client.post("/inscription/", {
             "username": "nouvel_employe",
@@ -156,28 +161,44 @@ class LoginConfirmationTests(TestCase):
             require_login_confirmation=True,
         )
         response = self.client.post("/login/", {"username": "employee1", "password": "secret1234"})
-        self.assertContains(response, self.user.email)
+        self.assertRedirects(response, "/connexion/confirmer/")
         self.assertFalse(response.wsgi_request.user.is_authenticated)
         self.assertEqual(len(mail.outbox), 1)
 
+        code_page = self.client.get("/connexion/confirmer/")
+        self.assertContains(code_page, self.user.email)
+
         token = EmailToken.objects.get(user=self.user, purpose=EmailToken.Purpose.LOGIN_CONFIRM)
-        confirm_response = self.client.get(f"/connexion/confirmer/{token.token}/", follow=True)
+        confirm_response = self.client.post("/connexion/confirmer/", {"code": token.token}, follow=True)
         self.assertTrue(confirm_response.context["user"].is_authenticated)
         self.assertEqual(confirm_response.context["user"], self.user)
 
-    def test_login_confirmation_link_expires(self):
+    def test_wrong_code_does_not_log_in_and_can_be_retried(self):
         EmailSettings.objects.create(
             label="Test", is_active=True, host="smtp.example.com", from_email="noreply@example.com",
             require_login_confirmation=True,
         )
-        token = EmailToken.objects.create(
-            user=self.user, purpose=EmailToken.Purpose.LOGIN_CONFIRM,
-            backend_path="django.contrib.auth.backends.ModelBackend",
+        self.client.post("/login/", {"username": "employee1", "password": "secret1234"})
+        response = self.client.post("/connexion/confirmer/", {"code": "000000000"}, follow=True)
+        self.assertFalse(response.context["user"].is_authenticated)
+        self.assertContains(response, "incorrect")
+
+        # Le code correct doit encore fonctionner ensuite (pas de session perdue).
+        token = EmailToken.objects.get(user=self.user, purpose=EmailToken.Purpose.LOGIN_CONFIRM)
+        retry = self.client.post("/connexion/confirmer/", {"code": token.token}, follow=True)
+        self.assertTrue(retry.context["user"].is_authenticated)
+
+    def test_login_confirmation_code_expires(self):
+        EmailSettings.objects.create(
+            label="Test", is_active=True, host="smtp.example.com", from_email="noreply@example.com",
+            require_login_confirmation=True,
         )
+        self.client.post("/login/", {"username": "employee1", "password": "secret1234"})
+        token = EmailToken.objects.get(user=self.user, purpose=EmailToken.Purpose.LOGIN_CONFIRM)
         token.created_at = timezone.now() - datetime.timedelta(minutes=20)
         token.save(update_fields=["created_at"])
 
-        response = self.client.get(f"/connexion/confirmer/{token.token}/", follow=True)
+        response = self.client.post("/connexion/confirmer/", {"code": token.token}, follow=True)
         self.assertFalse(response.context["user"].is_authenticated)
         self.assertContains(response, "expiré")
 
