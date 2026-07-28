@@ -56,19 +56,33 @@ _MAX_UPLOAD_MB = env.int('DJANGO_MAX_UPLOAD_MB', default=20)
 DATA_UPLOAD_MAX_MEMORY_SIZE = _MAX_UPLOAD_MB * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = _MAX_UPLOAD_MB * 1024 * 1024
 
-# HTTPS : la terminaison SSL est gérée par IIS (la DSI configure le certificat
-# sur le binding du site), pas par Django. Ces réglages restent désactivés par
-# défaut (développement local en HTTP) et ne doivent être activés en
-# production que si IIS transmet bien l'en-tête X-Forwarded-Proto — sinon
-# SECURE_SSL_REDIRECT provoquerait une boucle de redirection.
+# HTTPS : la terminaison SSL est gérée par le reverse proxy en amont (IIS ou
+# nginx selon l'environnement), pas par Django. Ces réglages restent désactivés
+# par défaut (développement local en HTTP) et ne doivent être activés en
+# production que si le proxy transmet bien un en-tête X-Forwarded-Proto dont
+# la valeur est exactement "https" (ex: nginx : `proxy_set_header
+# X-Forwarded-Proto $scheme;` — PAS `$https`, qui vaut "on"/vide et ne
+# correspondra jamais) — sinon SECURE_SSL_REDIRECT provoquerait une boucle de
+# redirection (Django croirait chaque requête non sécurisée et redirigerait
+# indéfiniment vers elle-même).
 DJANGO_FORCE_HTTPS = env.bool('DJANGO_FORCE_HTTPS', default=False)
 if DJANGO_FORCE_HTTPS:
     SECURE_SSL_REDIRECT = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    USE_X_FORWARDED_HOST = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+# Origines de confiance pour la vérification CSRF (obligatoire dès que
+# l'application est servie derrière un nom de domaine en HTTPS : sans ça,
+# Django compare l'en-tête Origin envoyé par le navigateur au schéma qu'il
+# perçoit lui-même de la requête, qui peut être "http" si le proxy ne
+# transmet pas correctement le HTTPS — voir DJANGO_FORCE_HTTPS ci-dessus —
+# et rejette alors tous les formulaires (connexion, soumission de demande...)
+# avec une erreur 403). Vide par défaut (dev local, pas de HTTPS).
+CSRF_TRUSTED_ORIGINS = env.list('DJANGO_CSRF_TRUSTED_ORIGINS', default=[])
 
 
 # Application definition
