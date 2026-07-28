@@ -639,3 +639,36 @@ class LoginRedirectTests(TestCase):
         self.client.login(username="someone", password="x")
         response = self.client.get("/login/")
         self.assertRedirects(response, "/")
+
+
+class Handler400Tests(TestCase):
+    """Retour déploiement : Django n'affiche par défaut aucun détail sur un
+    400 (page brute "Bad Request (400)") — un fichier joint trop volumineux
+    atterrissait ici sans message compréhensible pour l'utilisateur."""
+
+    def _request(self):
+        # RequestFactory ne fait pas tourner AuthenticationMiddleware (contrairement
+        # à une vraie requête HTTP) : le context processor sidebar a besoin de
+        # request.user, qu'on doit donc poser nous-mêmes ici.
+        from django.contrib.auth.models import AnonymousUser
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/")
+        request.user = AnonymousUser()
+        return request
+
+    def test_request_data_too_big_shows_actionable_message(self):
+        from django.core.exceptions import RequestDataTooBig
+
+        from approvals.views import handler400
+
+        response = handler400(self._request(), exception=RequestDataTooBig())
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("trop volumineux", response.content.decode())
+
+    def test_other_bad_request_shows_generic_message_without_leaking_exception(self):
+        from approvals.views import handler400
+
+        response = handler400(self._request(), exception=Exception("détail interne sensible"))
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn("détail interne sensible", response.content.decode())

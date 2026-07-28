@@ -10,6 +10,11 @@ from django.views.static import serve as serve_static
 
 from approvals import auth_views as approvals_auth_views
 
+# Sans ça, Django affiche sa page 400 générique sans aucun détail
+# (django/views/defaults.py) — ex: pièce jointe trop volumineuse, sans
+# message compréhensible pour l'utilisateur (retour déploiement).
+handler400 = 'approvals.views.handler400'
+
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('login/', approvals_auth_views.login_view, name='login'),

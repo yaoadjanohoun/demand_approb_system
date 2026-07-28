@@ -1,9 +1,13 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import (
+    PermissionDenied, RequestDataTooBig, TooManyFieldsSent, TooManyFilesSent, ValidationError,
+)
 from django.core.paginator import Paginator
+from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template import loader
 from django.urls import reverse
 
 from . import reports as reports_module
@@ -14,6 +18,7 @@ from .services import RoutingError, WorkflowEngine
 LIST_PAGE_SIZE = 15
 
 
+#dashboard
 @login_required
 def dashboard(request):
     request_types = RequestType.objects.filter(is_active=True).order_by("name")
@@ -29,6 +34,7 @@ def dashboard(request):
     )
 
 
+#vue du profil
 @login_required
 def profile(request):
     user_profile, _ = UserProfile.objects.get_or_create(user=request.user)
@@ -71,6 +77,7 @@ def profile(request):
     )
 
 
+#creer une demande de requete
 @login_required
 def request_create(request, type_id):
     request_type = get_object_or_404(RequestType, pk=type_id, is_active=True)
@@ -204,7 +211,7 @@ def request_edit(request, pk):
 @login_required
 def request_delete(request, pk):
     """Suppression réservée aux brouillons (une demande soumise doit rester
-    dans l'historique, cf. Manuel d'Administration §6 sur la traçabilité)."""
+    dans l'historique)."""
     req = get_object_or_404(Request, pk=pk)
     if req.requester_id != request.user.id:
         raise PermissionDenied
@@ -384,3 +391,19 @@ def reports(request):
 @staff_member_required
 def reports_export(request):
     return reports_module.export_requests_csv()
+
+
+# Django n'affiche par défaut aucun détail sur un 400 (page brute "Bad
+# Request (400)", volontairement — voir django/views/defaults.py) : un
+# fichier joint trop volumineux (au-delà de DJANGO_MAX_UPLOAD_MB, settings.py)
+# atterrissait ici sans aucun message compréhensible pour l'utilisateur
+# (retour déploiement, confondu avec une erreur serveur). On distingue ce cas
+# précis pour un message actionnable ; le reste garde un message générique
+# (jamais le détail de l'exception, qui peut révéler des infos internes).
+def handler400(request, exception=None):
+    if isinstance(exception, (RequestDataTooBig, TooManyFieldsSent, TooManyFilesSent)):
+        message = "Le fichier envoyé est trop volumineux. Réduis sa taille et réessaie."
+    else:
+        message = "La requête n'a pas pu être traitée. Réessaie, ou contacte un administrateur si le problème persiste."
+    html = loader.render_to_string("400.html", {"message": message}, request=request)
+    return HttpResponseBadRequest(html)

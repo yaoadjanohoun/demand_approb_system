@@ -16,7 +16,7 @@ from .models import (
     RequestType, Site, UserProfile,
 )
 from .services import RoutingError, WorkflowEngine
-from .validators import validate_person_name
+from .validators import validate_entity_name, validate_person_name
 from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSchemaBuilderWidget
 
 
@@ -34,9 +34,20 @@ admin.site.unregister(Group)
 admin.site.unregister(User)
 
 
+class GroupAdminForm(forms.ModelForm):
+    # django.contrib.auth.models.Group.name n'a par défaut aucune restriction
+    # de caractères (même trou que User.first_name/last_name, voir
+    # ValidatedUserChangeForm plus bas).
+    name = forms.CharField(max_length=150, validators=[validate_entity_name])
+
+    class Meta:
+        model = Group
+        fields = "__all__"
+
+
 @admin.register(Group)
 class GroupAdmin(BaseGroupAdmin, ModelAdmin):
-    pass
+    form = GroupAdminForm
 
 
 class _ValidatedNameFormMixin:

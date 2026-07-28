@@ -5,6 +5,8 @@ from django.contrib.auth.models import Group, Permission, User
 from django.core.management import call_command
 from django.test import RequestFactory, TestCase
 
+from django.core.exceptions import ValidationError
+
 from .models import Department, UserProfile, Site
 from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget
 
@@ -15,6 +17,22 @@ class DepartmentSiteModelTests(TestCase):
         site = Site.objects.create(name="Lyon")
         self.assertEqual(str(department), "Marketing")
         self.assertEqual(str(site), "Lyon")
+
+    def test_name_with_only_forbidden_characters_rejected(self):
+        with self.assertRaises(ValidationError):
+            Department(name="////////").full_clean()
+
+    def test_name_with_common_business_characters_allowed(self):
+        # "R&D", des chiffres, des parenthèses... : légitimes pour un nom
+        # d'entité (contrairement à un prénom/nom de personne, plus strict).
+        Department(name="R&D (Site 12)").full_clean()
+
+    def test_ad_sync_bypasses_validation_via_get_or_create(self):
+        """get_or_create() n'appelle jamais full_clean() : la synchronisation
+        Active Directory (approvals/auth_backends.py) n'est jamais bloquée
+        par ce validateur, même si l'annuaire renvoie un nom inhabituel."""
+        department, _ = Department.objects.get_or_create(name="////////")
+        self.assertEqual(department.name, "////////")
 
 
 class CriteriaBuilderWidgetTests(TestCase):

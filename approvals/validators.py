@@ -2,6 +2,8 @@
 
 Schemas match "Dictionnaire de Données" section 2 (Schémas A, B, C).
 """
+import re
+
 import jsonschema
 from django.core.exceptions import ValidationError
 
@@ -89,3 +91,20 @@ def validate_person_name(value):
             "Ne peut contenir que des lettres, espaces, apostrophes et tirets "
             f"(caractère(s) non autorisé(s) : {' '.join(invalid)})."
         )
+
+
+_ENTITY_NAME_FORBIDDEN_RE = re.compile(r'[<>{}\[\]\\|~^`"]')
+
+
+def validate_entity_name(value):
+    """Nom d'une entité (département, site, type de demande, configuration
+    email...) : plus permissif que validate_person_name (chiffres, "&", "/",
+    tirets, parenthèses tous légitimes ici — ex: "R&D", "Site 12") mais
+    bloque quand même les cas manifestement invalides : aucune lettre/chiffre
+    du tout, ou des caractères qui n'ont jamais leur place dans un nom
+    (chevrons, accolades, crochets, barre verticale...)."""
+    if not value or not any(ch.isalnum() for ch in value):
+        raise ValidationError("Doit contenir au moins une lettre ou un chiffre.")
+    match = _ENTITY_NAME_FORBIDDEN_RE.search(value)
+    if match:
+        raise ValidationError(f'Caractère non autorisé : "{match.group()}".')

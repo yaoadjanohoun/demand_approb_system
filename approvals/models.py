@@ -10,6 +10,7 @@ from . import crypto
 from .validators import (
     validate_approvers_config,
     validate_criteria,
+    validate_entity_name,
     validate_form_schema,
 )
 
@@ -32,7 +33,7 @@ class Department(models.Model):
     de règles (ApprovalRule.criteria.department_ids, qui restent une liste
     de PK de Department)."""
 
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True, validators=[validate_entity_name])
 
     class Meta:
         ordering = ["name"]
@@ -44,7 +45,7 @@ class Department(models.Model):
 class Site(models.Model):
     """Site géographique de l'entreprise (même logique que Department)."""
 
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True, validators=[validate_entity_name])
 
     class Meta:
         ordering = ["name"]
@@ -106,7 +107,7 @@ class UserProfile(models.Model):
 class RequestType(models.Model):
     """Catégorie de demande et structure de son formulaire dynamique."""
 
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True, validators=[validate_entity_name])
     code = models.CharField(max_length=20, unique=True)
     is_active = models.BooleanField(default=True)
     form_schema = models.JSONField(default=dict, validators=[validate_form_schema])
@@ -373,7 +374,10 @@ class EmailSettings(models.Model):
     (mode dégradé sûr pour le développement local).
     """
 
-    label = models.CharField(max_length=100, help_text='Ex: "Gmail (test)", "Exchange (production)".')
+    label = models.CharField(
+        max_length=100, validators=[validate_entity_name],
+        help_text='Ex: "Gmail (test)", "Exchange (production)".',
+    )
     is_active = models.BooleanField(
         default=False,
         help_text="Une seule configuration active à la fois (la dernière activée gagne).",
