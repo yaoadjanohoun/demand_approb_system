@@ -288,6 +288,18 @@ class ConflictAndPriorityTests(TestCase):
         )
         same_criteria.full_clean()  # ne doit pas lever d'exception
 
+    def test_missing_level_raises_validation_error_not_typeerror(self):
+        """Retour déploiement : laisser "Level" vide dans l'admin faisait planter
+        la sauvegarde avec un TypeError brut (500) au lieu d'un message d'erreur
+        clair — Model.full_clean() appelle clean() même quand clean_fields() a
+        déjà relevé une erreur sur level, qui reste donc None à ce moment-là."""
+        rule = ApprovalRule(
+            request_type=self.request_type, level=None,
+            approvers_config={"type": "user", "user_id": self.manager_a.id},
+        )
+        with self.assertRaises(ValidationError):
+            rule.full_clean()
+
     def test_most_specific_rule_wins_over_default(self):
         ApprovalRule.objects.create(
             request_type=self.request_type, level=1,

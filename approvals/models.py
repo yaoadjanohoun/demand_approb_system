@@ -153,7 +153,13 @@ class ApprovalRule(models.Model):
         ordering = ["request_type", "level"]
 
     def clean(self):
-        if self.level < 1:
+        # self.level peut être None ici (champ laissé vide dans le formulaire) :
+        # Model.full_clean() appelle clean() même si clean_fields() a déjà
+        # relevé une erreur "ce champ est obligatoire" sur level, pour que les
+        # deux erreurs remontent ensemble (comportement Django documenté) —
+        # comparer None à un entier plantait avec un TypeError non intercepté
+        # (500 brut) au lieu de laisser passer le message d'erreur normal.
+        if self.level is not None and self.level < 1:
             raise ValidationError({"level": "Le niveau doit être supérieur à 0."})
 
         if self.is_active and self.request_type_id:
