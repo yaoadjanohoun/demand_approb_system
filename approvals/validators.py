@@ -70,3 +70,22 @@ def validate_criteria(value):
 
 def validate_approvers_config(value):
     _validate(value, APPROVERS_CONFIG_SCHEMA, "approvers_config")
+
+
+_ALLOWED_NAME_EXTRA_CHARS = set(" -'’")
+
+
+def validate_person_name(value):
+    """Prénom/nom : lettres (accents compris), espaces, apostrophes et tirets
+    uniquement — retour déploiement : un champ "Prénom" enregistré avec une
+    suite de caractères type "Super////////" (aucune validation avant) casse
+    la logique métier partout où le nom complet est affiché (listes, emails,
+    historique d'audit)."""
+    if not value or not any(ch.isalpha() for ch in value):
+        raise ValidationError("Doit contenir au moins une lettre.")
+    invalid = sorted({ch for ch in value if not (ch.isalpha() or ch in _ALLOWED_NAME_EXTRA_CHARS)})
+    if invalid:
+        raise ValidationError(
+            "Ne peut contenir que des lettres, espaces, apostrophes et tirets "
+            f"(caractère(s) non autorisé(s) : {' '.join(invalid)})."
+        )

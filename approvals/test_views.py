@@ -252,6 +252,19 @@ class PersonalInfoEditTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.username, "employee1")
 
+    def test_first_name_with_stray_characters_rejected(self):
+        """Retour déploiement : un "Prénom" enregistré avec une suite de "/"
+        (aucune validation avant) cassait l'affichage du nom complet partout
+        dans l'app (listes, emails, historique d'audit)."""
+        response = self.client.post("/profil/", {
+            "action": "update_info",
+            "username": "employee1", "first_name": "Super////////", "last_name": "Name",
+            "email": "old@example.com",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Old")
+
     def test_manager_department_site_not_editable_via_this_form(self):
         from .models import Department
 

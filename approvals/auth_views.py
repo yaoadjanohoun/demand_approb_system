@@ -27,14 +27,15 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import EmailSettings, EmailToken, UserProfile
+from .validators import validate_person_name
 
 logger = logging.getLogger(__name__)
 
 
 class RegistrationForm(forms.Form):
     username = forms.CharField(max_length=150, label="Nom d'utilisateur")
-    first_name = forms.CharField(max_length=150, label="Prénom")
-    last_name = forms.CharField(max_length=150, label="Nom")
+    first_name = forms.CharField(max_length=150, label="Prénom", validators=[validate_person_name])
+    last_name = forms.CharField(max_length=150, label="Nom", validators=[validate_person_name])
     email = forms.EmailField(label="Email")
     password = forms.CharField(widget=forms.PasswordInput, label="Mot de passe")
     password_confirm = forms.CharField(widget=forms.PasswordInput, label="Confirmer le mot de passe")

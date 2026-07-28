@@ -5,6 +5,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 
 from .models import UserProfile
+from .validators import validate_person_name
 
 User = get_user_model()
 
@@ -19,6 +20,14 @@ class PersonalInfoForm(forms.ModelForm):
     """Champs qu'un utilisateur peut modifier lui-même (retour client) — le
     reste (manager, département, site, rôle) reste réservé à un admin."""
 
+    # Déclarés explicitement (plutôt que laissés à ModelForm) pour y ajouter
+    # validate_person_name — le User.first_name/last_name de Django n'a par
+    # défaut aucune restriction de caractères (retour déploiement : un champ
+    # "Prénom" enregistré avec une suite de "/" cassait l'affichage du nom
+    # complet partout dans l'app).
+    first_name = forms.CharField(max_length=150, required=False, label="Prénom", validators=[validate_person_name])
+    last_name = forms.CharField(max_length=150, required=False, label="Nom", validators=[validate_person_name])
+
     class Meta:
         model = User
         fields = ["username", "first_name", "last_name", "email"]
@@ -31,6 +40,8 @@ FIELD_BUILDERS = {
     "date": lambda: forms.DateField(widget=forms.DateInput(attrs={"type": "date"})),
     "boolean": lambda: forms.BooleanField(),
 }
+
+
 
 
 def build_dynamic_form(request_type, data=None, initial=None):

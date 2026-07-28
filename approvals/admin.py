@@ -16,6 +16,7 @@ from .models import (
     RequestType, Site, UserProfile,
 )
 from .services import RoutingError, WorkflowEngine
+from .validators import validate_person_name
 from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSchemaBuilderWidget
 
 
@@ -38,10 +39,32 @@ class GroupAdmin(BaseGroupAdmin, ModelAdmin):
     pass
 
 
+class _ValidatedNameFormMixin:
+    """Ajoute validate_person_name à first_name/last_name sans toucher aux
+    widgets d'Unfold — Django's User.first_name/last_name n'a par défaut
+    aucune restriction de caractères (retour déploiement : un "Prénom"
+    enregistré via l'admin avec une suite de "/" cassait l'affichage du nom
+    complet partout dans l'app)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field_name in ("first_name", "last_name"):
+            if field_name in self.fields:
+                self.fields[field_name].validators.append(validate_person_name)
+
+
+class ValidatedUserChangeForm(_ValidatedNameFormMixin, UserChangeForm):
+    pass
+
+
+class ValidatedUserCreationForm(_ValidatedNameFormMixin, UserCreationForm):
+    pass
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin, ModelAdmin):
-    form = UserChangeForm
-    add_form = UserCreationForm
+    form = ValidatedUserChangeForm
+    add_form = ValidatedUserCreationForm
     change_password_form = AdminPasswordChangeForm
 
 STATUS_LABELS = {
