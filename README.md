@@ -52,6 +52,7 @@ Voir [`TEST_RESULTS.md`](TEST_RESULTS.md) pour un dernier relevé d'exécution.
 
 | Document | Contenu |
 |---|---|
+| [`Documentation Complète Illustrée.md`](Documentation%20Complète%20Illustrée.md) | Visite guidée écran par écran (demandeur, approbateur, admin), avec captures d'écran |
 | [`Manuel d'Administration Fonctionnel.txt`](Manuel%20d'Administration%20Fonctionnel.txt) | Guide de l'admin fonctionnel (configuration des types de demande, règles, délégations) |
 | [`Les Spécifications Techniques.txt`](Les%20Spécifications%20Techniques.txt) | Architecture, contraintes de déploiement, choix techniques |
 | [`Guide de Test de Staging.txt`](Guide%20de%20Test%20de%20Staging.txt) | Pour la DSI : valider IIS/SQL Server/Active Directory en conditions réelles avant mise en production |
