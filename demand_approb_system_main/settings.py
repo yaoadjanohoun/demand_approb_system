@@ -46,6 +46,16 @@ DEBUG = env.bool('DJANGO_DEBUG', default=True)
 
 ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
 
+# La limite par défaut de Django pour la taille d'une requête (2,5 Mo) est
+# plus basse que ATTACHMENT_MAX_SIZE_MB (5 Mo, voir approvals/models.py) :
+# sans ce réglage, une pièce jointe pourtant autorisée par le modèle était
+# rejetée avant même d'atteindre le formulaire (page générique en production,
+# "entity too large" côté client — retour déploiement). La marge au-delà de
+# 5 Mo couvre aussi le cas de plusieurs pièces jointes dans la même requête.
+_MAX_UPLOAD_MB = env.int('DJANGO_MAX_UPLOAD_MB', default=20)
+DATA_UPLOAD_MAX_MEMORY_SIZE = _MAX_UPLOAD_MB * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = _MAX_UPLOAD_MB * 1024 * 1024
+
 # HTTPS : la terminaison SSL est gérée par IIS (la DSI configure le certificat
 # sur le binding du site), pas par Django. Ces réglages restent désactivés par
 # défaut (développement local en HTTP) et ne doivent être activés en
