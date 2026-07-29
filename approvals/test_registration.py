@@ -28,6 +28,16 @@ class PasswordResetTemplateTests(TestCase):
         self.assertNotContains(response, "Site d’administration de Django")
         self.assertContains(response, "Retour à la connexion")
 
+    def test_password_reset_form_renders_content_when_logged_in(self):
+        """Retour test déploiement : base.html n'affiche le bloc "guest_content"
+        que pour un utilisateur non connecté — un utilisateur déjà connecté qui
+        demandait à réinitialiser son mot de passe voyait une page blanche
+        (seul le bloc "content", vide, était pris en compte)."""
+        User.objects.create_user("employee1", password="x")
+        self.client.login(username="employee1", password="x")
+        response = self.client.get("/mot-de-passe/reinitialiser/")
+        self.assertContains(response, "Mot de passe oublié")
+
 
 class RegistrationFlowTests(TestCase):
     def setUp(self):
@@ -37,6 +47,16 @@ class RegistrationFlowTests(TestCase):
         response = self.client.get("/inscription/")
         self.assertContains(response, 'id="toggle-password"')
         self.assertContains(response, "id_password_confirm")
+
+    def test_logged_in_user_visiting_registration_page_is_redirected(self):
+        """Même bug que le formulaire de mot de passe oublié (page blanche) :
+        créer un second compte en étant déjà connecté n'a de toute façon pas
+        de sens métier, donc on redirige plutôt que d'essayer d'afficher la
+        page."""
+        User.objects.create_user("employee1", password="x")
+        self.client.login(username="employee1", password="x")
+        response = self.client.get("/inscription/")
+        self.assertRedirects(response, "/")
 
     def test_registration_creates_inactive_user_and_sends_confirmation_email(self):
         response = self.client.post("/inscription/", {

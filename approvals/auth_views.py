@@ -64,6 +64,15 @@ class RegistrationForm(forms.Form):
 #inscription
 
 def register(request):
+    # Retour test déploiement : sans cette garde (déjà présente sur
+    # login_view), un utilisateur déjà connecté qui visitait /inscription/
+    # voyait une page blanche — base.html n'affiche que le bloc "content"
+    # pour un utilisateur authentifié, que cette page ne définissait pas.
+    # Créer un second compte en étant déjà connecté n'a de toute façon pas
+    # de sens métier.
+    if request.user.is_authenticated:
+        return redirect(reverse("approvals:dashboard"))
+
     if request.method == "POST":
         form = RegistrationForm(request.POST)
         if form.is_valid():
