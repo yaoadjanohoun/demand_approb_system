@@ -212,6 +212,17 @@ class AdminDashboardTests(TestCase):
         self.assertEqual(self.client.get("/admin/approvals/department/").status_code, 200)
         self.assertEqual(self.client.get("/admin/approvals/site/").status_code, 200)
 
+    def test_admin_logout_button_asks_for_confirmation(self):
+        """Retour client : le bouton de déconnexion de l'admin (fourni par
+        Unfold) déconnectait immédiatement au clic, sans confirmation,
+        contrairement à l'équivalent côté app. Surchargé dans
+        templates/unfold/helpers/account_links.html."""
+        superuser = User.objects.create_superuser("root3", password="x")
+        self.client.force_login(superuser)
+        response = self.client.get("/admin/")
+        self.assertContains(response, 'id="logout-form"')
+        self.assertContains(response, "onsubmit=\"return confirm(")
+
 
 class SidebarPermissionFilteringTests(TestCase):
     """Retour client : un utilisateur (ex: groupe "Comité de direction") à qui
