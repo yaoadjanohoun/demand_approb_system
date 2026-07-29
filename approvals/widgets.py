@@ -160,15 +160,25 @@ class FormSchemaBuilderWidget(forms.Textarea):
 
 class CriteriaBuilderWidget(forms.Textarea):
     """Constructeur visuel pour ApprovalRule.criteria : liste de conditions
-    (type, valeur) au lieu de JSON brut. Vide = règle par défaut (sans condition)."""
+    (type, valeur) au lieu de JSON brut. Vide = règle par défaut (sans condition).
+
+    ApprovalRule est affiché en inline (TabularInline) sous RequestType : un
+    admin peut ajouter une ligne "Approval rule" supplémentaire à la volée via
+    le bouton "+ Ajouter...". Django clone alors le HTML du formulaire vide
+    (admin/js/inlines.js) — mais un navigateur n'exécute jamais les balises
+    <script> insérées de cette façon (comportement standard, pas un bug
+    Django). Résultat (retour client) : le bouton "+ Ajouter un critère" de la
+    ligne nouvellement ajoutée n'avait tout simplement aucun gestionnaire de
+    clic branché, alors que la toute première ligne (présente au chargement de
+    la page, où le <script> s'exécute normalement) fonctionnait.
+    Fix : la logique d'initialisation est extraite dans une fonction globale
+    idempotente, appelée à la fois au chargement et sur l'événement
+    "formset:added" que Django déclenche justement pour ce cas
+    (voir admin/js/inlines.js, CustomEvent "formset:added")."""
 
     def render(self, name, value, attrs=None, renderer=None):
         textarea_html = super().render(name, value, attrs, renderer)
         widget_id = (attrs or {}).get("id", f"id_{name}")
-        try:
-            initial = json.loads(value) if value else {}
-        except (TypeError, ValueError):
-            initial = {}
 
         departments = [(d.id, d.name) for d in Department.objects.all()]
         sites = [(s.id, s.name) for s in Site.objects.all()]
@@ -182,120 +192,137 @@ class CriteriaBuilderWidget(forms.Textarea):
 </div>
 <script>
 (function() {{
-  const CRITERION_TYPES = {json.dumps(CRITERION_TYPES)};
-  const DEPARTMENTS = {json.dumps(departments)};
-  const SITES = {json.dumps(sites)};
-  const container = document.currentScript.previousElementSibling;
-  const textarea = document.getElementById("{widget_id}");
-  const rowsDiv = container.querySelector(".cb-rows");
-  const addBtn = container.querySelector(".cb-add");
+  if (!window.__cbBuilderInit) {{
+    window.__cbBuilderInit = function(container) {{
+      if (container.dataset.cbInitialized) return;
+      container.dataset.cbInitialized = "1";
 
-  function kindFor(key) {{
-    const found = CRITERION_TYPES.find(function(c) {{ return c[0] === key; }});
-    return found ? found[2] : "text";
-  }}
+      const CRITERION_TYPES = window.__cbCriterionTypes;
+      const DEPARTMENTS = window.__cbDepartments;
+      const SITES = window.__cbSites;
+      const textarea = document.getElementById(container.dataset.textareaId);
+      const rowsDiv = container.querySelector(".cb-rows");
+      const addBtn = container.querySelector(".cb-add");
 
-  function makeValueControl(key, val) {{
-    const kind = kindFor(key);
-    if (kind === "departments" || kind === "site") {{
-      const select = document.createElement("select");
-      select.className = "cb-value";
-      select.dataset.kind = kind;
-      if (kind === "departments") select.multiple = true;
-      const options = kind === "departments" ? DEPARTMENTS : SITES;
-      const selected = kind === "departments" ? (Array.isArray(val) ? val.map(String) : []) : [String(val)];
-      options.forEach(function(opt) {{
-        const o = document.createElement("option");
-        o.value = opt[0];
-        o.textContent = opt[1];
-        if (selected.indexOf(String(opt[0])) !== -1) o.selected = true;
-        select.appendChild(o);
-      }});
-      select.style.flex = "1";
-      return select;
-    }}
-    const input = document.createElement("input");
-    input.type = "text";
-    input.className = "cb-value";
-    input.dataset.kind = kind;
-    input.style.flex = "1";
-    input.value = val === undefined || val === null ? "" : String(val);
-    return input;
-  }}
-
-  function makeRow(key, val) {{
-    const row = document.createElement("div");
-    row.className = "cb-row";
-    row.style.cssText = "display:flex; gap:8px; align-items:center; margin-bottom:6px;";
-
-    const select = document.createElement("select");
-    select.className = "cb-key";
-    CRITERION_TYPES.forEach(function(c) {{
-      const o = document.createElement("option");
-      o.value = c[0];
-      o.textContent = c[1];
-      if (c[0] === key) o.selected = true;
-      select.appendChild(o);
-    }});
-    select.addEventListener("change", function() {{
-      const oldControl = row.querySelector(".cb-value");
-      const newControl = makeValueControl(select.value, null);
-      row.replaceChild(newControl, oldControl);
-    }});
-
-    const valueControl = makeValueControl(key, val);
-
-    const delBtn = document.createElement("button");
-    delBtn.type = "button";
-    delBtn.textContent = "Supprimer";
-    delBtn.onclick = function() {{ row.remove(); }};
-
-    row.appendChild(select);
-    row.appendChild(valueControl);
-    row.appendChild(delBtn);
-    return row;
-  }}
-
-  const initial = {json.dumps(initial)};
-  Object.keys(initial).forEach(function(key) {{
-    rowsDiv.appendChild(makeRow(key, initial[key]));
-  }});
-
-  addBtn.addEventListener("click", function() {{
-    const used = Array.from(rowsDiv.querySelectorAll(".cb-key")).map(function(s) {{ return s.value; }});
-    const free = CRITERION_TYPES.find(function(c) {{ return used.indexOf(c[0]) === -1; }});
-    rowsDiv.appendChild(makeRow(free ? free[0] : CRITERION_TYPES[0][0], null));
-  }});
-
-  function sync() {{
-    const criteria = {{}};
-    Array.from(rowsDiv.querySelectorAll(".cb-row")).forEach(function(row) {{
-      const key = row.querySelector(".cb-key").value;
-      const control = row.querySelector(".cb-value");
-      const kind = control.dataset.kind;
-      if (kind === "departments") {{
-        const ids = Array.from(control.selectedOptions).map(function(o) {{ return parseInt(o.value, 10); }});
-        if (ids.length) criteria[key] = ids;
-      }} else if (kind === "site") {{
-        if (control.value) criteria[key] = parseInt(control.value, 10);
-      }} else {{
-        const raw = control.value.trim();
-        if (raw === "") return;
-        if (kind === "number") {{
-          const n = Number(raw);
-          if (!isNaN(n)) criteria[key] = n;
-        }} else {{
-          criteria[key] = raw;
-        }}
+      function kindFor(key) {{
+        const found = CRITERION_TYPES.find(function(c) {{ return c[0] === key; }});
+        return found ? found[2] : "text";
       }}
+
+      function makeValueControl(key, val) {{
+        const kind = kindFor(key);
+        if (kind === "departments" || kind === "site") {{
+          const select = document.createElement("select");
+          select.className = "cb-value";
+          select.dataset.kind = kind;
+          if (kind === "departments") select.multiple = true;
+          const options = kind === "departments" ? DEPARTMENTS : SITES;
+          const selected = kind === "departments" ? (Array.isArray(val) ? val.map(String) : []) : [String(val)];
+          options.forEach(function(opt) {{
+            const o = document.createElement("option");
+            o.value = opt[0];
+            o.textContent = opt[1];
+            if (selected.indexOf(String(opt[0])) !== -1) o.selected = true;
+            select.appendChild(o);
+          }});
+          select.style.flex = "1";
+          return select;
+        }}
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "cb-value";
+        input.dataset.kind = kind;
+        input.style.flex = "1";
+        input.value = val === undefined || val === null ? "" : String(val);
+        return input;
+      }}
+
+      function makeRow(key, val) {{
+        const row = document.createElement("div");
+        row.className = "cb-row";
+        row.style.cssText = "display:flex; gap:8px; align-items:center; margin-bottom:6px;";
+
+        const select = document.createElement("select");
+        select.className = "cb-key";
+        CRITERION_TYPES.forEach(function(c) {{
+          const o = document.createElement("option");
+          o.value = c[0];
+          o.textContent = c[1];
+          if (c[0] === key) o.selected = true;
+          select.appendChild(o);
+        }});
+        select.addEventListener("change", function() {{
+          const oldControl = row.querySelector(".cb-value");
+          const newControl = makeValueControl(select.value, null);
+          row.replaceChild(newControl, oldControl);
+        }});
+
+        const valueControl = makeValueControl(key, val);
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.textContent = "Supprimer";
+        delBtn.onclick = function() {{ row.remove(); }};
+
+        row.appendChild(select);
+        row.appendChild(valueControl);
+        row.appendChild(delBtn);
+        return row;
+      }}
+
+      let initial = {{}};
+      try {{ initial = textarea.value ? JSON.parse(textarea.value) : {{}}; }} catch (e) {{ initial = {{}}; }}
+      Object.keys(initial).forEach(function(key) {{
+        rowsDiv.appendChild(makeRow(key, initial[key]));
+      }});
+
+      addBtn.addEventListener("click", function() {{
+        const used = Array.from(rowsDiv.querySelectorAll(".cb-key")).map(function(s) {{ return s.value; }});
+        const free = CRITERION_TYPES.find(function(c) {{ return used.indexOf(c[0]) === -1; }});
+        rowsDiv.appendChild(makeRow(free ? free[0] : CRITERION_TYPES[0][0], null));
+      }});
+
+      function sync() {{
+        const criteria = {{}};
+        Array.from(rowsDiv.querySelectorAll(".cb-row")).forEach(function(row) {{
+          const key = row.querySelector(".cb-key").value;
+          const control = row.querySelector(".cb-value");
+          const kind = control.dataset.kind;
+          if (kind === "departments") {{
+            const ids = Array.from(control.selectedOptions).map(function(o) {{ return parseInt(o.value, 10); }});
+            if (ids.length) criteria[key] = ids;
+          }} else if (kind === "site") {{
+            if (control.value) criteria[key] = parseInt(control.value, 10);
+          }} else {{
+            const raw = control.value.trim();
+            if (raw === "") return;
+            if (kind === "number") {{
+              const n = Number(raw);
+              if (!isNaN(n)) criteria[key] = n;
+            }} else {{
+              criteria[key] = raw;
+            }}
+          }}
+        }});
+        textarea.value = JSON.stringify(criteria);
+      }}
+
+      const form = container.closest("form");
+      if (form) {{
+        form.addEventListener("submit", sync);
+      }}
+    }};
+
+    document.addEventListener("formset:added", function(e) {{
+      e.target.querySelectorAll(".cb-builder").forEach(window.__cbBuilderInit);
     }});
-    textarea.value = JSON.stringify(criteria);
   }}
 
-  const form = container.closest("form");
-  if (form) {{
-    form.addEventListener("submit", sync);
-  }}
+  window.__cbCriterionTypes = {json.dumps(CRITERION_TYPES)};
+  window.__cbDepartments = {json.dumps(departments)};
+  window.__cbSites = {json.dumps(sites)};
+
+  window.__cbBuilderInit(document.currentScript.previousElementSibling);
 }})();
 </script>
 """)
@@ -340,10 +367,6 @@ class ApproversConfigBuilderWidget(forms.Textarea):
     def render(self, name, value, attrs=None, renderer=None):
         textarea_html = super().render(name, value, attrs, renderer)
         widget_id = (attrs or {}).get("id", f"id_{name}")
-        try:
-            initial = json.loads(value) if value else {}
-        except (TypeError, ValueError):
-            initial = {}
 
         users_qs = User.objects.filter(is_active=True)
         department_id = _scoped_department_id(self.request)
@@ -352,6 +375,9 @@ class ApproversConfigBuilderWidget(forms.Textarea):
         users = [(u.id, u.get_full_name() or u.username) for u in users_qs.order_by("username")]
         groups = [(g.id, g.name) for g in Group.objects.order_by("name")]
 
+        # Même bug/fix que CriteriaBuilderWidget ci-dessus (widget affiché dans
+        # le même inline ApprovalRule répétable) : initialisation extraite dans
+        # une fonction globale idempotente, ré-appelée sur "formset:added".
         return mark_safe(f"""
 <div class="acb-builder" data-textarea-id="{widget_id}" style="max-width: 560px;">
   <label style="display:block; font-weight:600; margin-bottom:4px;">Mode de résolution</label>
@@ -376,67 +402,84 @@ class ApproversConfigBuilderWidget(forms.Textarea):
 </div>
 <script>
 (function() {{
-  const TYPE_OPTIONS = {json.dumps(APPROVER_TYPE_CHOICES)};
-  const USERS = {json.dumps(users)};
-  const GROUPS = {json.dumps(groups)};
-  const container = document.currentScript.previousElementSibling;
-  const textarea = document.getElementById("{widget_id}");
+  if (!window.__acbBuilderInit) {{
+    window.__acbBuilderInit = function(container) {{
+      if (container.dataset.acbInitialized) return;
+      container.dataset.acbInitialized = "1";
 
-  const typeSelect = container.querySelector(".acb-type");
-  const userSelect = container.querySelector(".acb-user");
-  const groupSelect = container.querySelector(".acb-group");
-  const fallbackSelect = container.querySelector(".acb-fallback");
+      const TYPE_OPTIONS = window.__acbTypeOptions;
+      const USERS = window.__acbUsers;
+      const GROUPS = window.__acbGroups;
+      const textarea = document.getElementById(container.dataset.textareaId);
 
-  function fillOptions(select, options, selectedValue, allowBlank) {{
-    select.innerHTML = "";
-    if (allowBlank) {{
-      const blank = document.createElement("option");
-      blank.value = "";
-      blank.textContent = "---------";
-      select.appendChild(blank);
-    }}
-    options.forEach(function(opt) {{
-      const o = document.createElement("option");
-      o.value = opt[0];
-      o.textContent = opt[1];
-      if (String(opt[0]) === String(selectedValue)) o.selected = true;
-      select.appendChild(o);
+      const typeSelect = container.querySelector(".acb-type");
+      const userSelect = container.querySelector(".acb-user");
+      const groupSelect = container.querySelector(".acb-group");
+      const fallbackSelect = container.querySelector(".acb-fallback");
+
+      function fillOptions(select, options, selectedValue, allowBlank) {{
+        select.innerHTML = "";
+        if (allowBlank) {{
+          const blank = document.createElement("option");
+          blank.value = "";
+          blank.textContent = "---------";
+          select.appendChild(blank);
+        }}
+        options.forEach(function(opt) {{
+          const o = document.createElement("option");
+          o.value = opt[0];
+          o.textContent = opt[1];
+          if (String(opt[0]) === String(selectedValue)) o.selected = true;
+          select.appendChild(o);
+        }});
+      }}
+
+      let initial = {{}};
+      try {{ initial = textarea.value ? JSON.parse(textarea.value) : {{}}; }} catch (e) {{ initial = {{}}; }}
+
+      fillOptions(typeSelect, TYPE_OPTIONS, initial.type || "manager", false);
+      fillOptions(userSelect, USERS, initial.user_id, true);
+      fillOptions(groupSelect, GROUPS, initial.group_id, true);
+      fillOptions(fallbackSelect, USERS, initial.fallback_user_id, true);
+
+      function updateVisibility() {{
+        const type = typeSelect.value;
+        container.querySelector(".acb-field-user").style.display = type === "user" ? "block" : "none";
+        container.querySelector(".acb-field-group").style.display = type === "group" ? "block" : "none";
+        container.querySelector(".acb-field-manager").style.display = type === "manager" ? "block" : "none";
+      }}
+      updateVisibility();
+      typeSelect.addEventListener("change", updateVisibility);
+
+      function sync() {{
+        const type = typeSelect.value;
+        const config = {{type: type}};
+        if (type === "user" && userSelect.value) {{
+          config.user_id = parseInt(userSelect.value, 10);
+        }} else if (type === "group" && groupSelect.value) {{
+          config.group_id = parseInt(groupSelect.value, 10);
+        }} else if (type === "manager" && fallbackSelect.value) {{
+          config.fallback_user_id = parseInt(fallbackSelect.value, 10);
+        }}
+        textarea.value = JSON.stringify(config);
+      }}
+
+      const form = container.closest("form");
+      if (form) {{
+        form.addEventListener("submit", sync);
+      }}
+    }};
+
+    document.addEventListener("formset:added", function(e) {{
+      e.target.querySelectorAll(".acb-builder").forEach(window.__acbBuilderInit);
     }});
   }}
 
-  const initial = {json.dumps(initial)};
+  window.__acbTypeOptions = {json.dumps(APPROVER_TYPE_CHOICES)};
+  window.__acbUsers = {json.dumps(users)};
+  window.__acbGroups = {json.dumps(groups)};
 
-  fillOptions(typeSelect, TYPE_OPTIONS, initial.type || "manager", false);
-  fillOptions(userSelect, USERS, initial.user_id, true);
-  fillOptions(groupSelect, GROUPS, initial.group_id, true);
-  fillOptions(fallbackSelect, USERS, initial.fallback_user_id, true);
-
-  function updateVisibility() {{
-    const type = typeSelect.value;
-    container.querySelector(".acb-field-user").style.display = type === "user" ? "block" : "none";
-    container.querySelector(".acb-field-group").style.display = type === "group" ? "block" : "none";
-    container.querySelector(".acb-field-manager").style.display = type === "manager" ? "block" : "none";
-  }}
-  updateVisibility();
-  typeSelect.addEventListener("change", updateVisibility);
-
-  function sync() {{
-    const type = typeSelect.value;
-    const config = {{type: type}};
-    if (type === "user" && userSelect.value) {{
-      config.user_id = parseInt(userSelect.value, 10);
-    }} else if (type === "group" && groupSelect.value) {{
-      config.group_id = parseInt(groupSelect.value, 10);
-    }} else if (type === "manager" && fallbackSelect.value) {{
-      config.fallback_user_id = parseInt(fallbackSelect.value, 10);
-    }}
-    textarea.value = JSON.stringify(config);
-  }}
-
-  const form = container.closest("form");
-  if (form) {{
-    form.addEventListener("submit", sync);
-  }}
+  window.__acbBuilderInit(document.currentScript.previousElementSibling);
 }})();
 </script>
 """)
