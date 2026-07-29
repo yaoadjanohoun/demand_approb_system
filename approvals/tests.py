@@ -58,6 +58,30 @@ class WorkflowEngineTests(TestCase):
         self.assertEqual(request.status, Request.Status.APPROVED)
         self.assertIsNotNone(request.completed_at)
 
+    def test_delegation_for_another_user_does_not_affect_unrelated_approver(self):
+        """Retour client : une délégation active pour director1 (jeu de
+        données seed_uat) faisait craindre qu'un employé dont le manager
+        est quelqu'un d'autre (ex: manager1) voie sa demande détournée vers
+        director1_delegate. Le filtre delegator_id=user_id (services.py)
+        ne doit matcher que le VRAI approbateur résolu à ce niveau — vérifié
+        ici explicitement avec une délégation active pour un tiers sans
+        rapport avec la demande."""
+        Delegation.objects.create(
+            delegator=self.director, delegate=self.director_delegate,
+            start_date=datetime.date.today() - datetime.timedelta(days=1),
+            end_date=datetime.date.today() + datetime.timedelta(days=5),
+        )
+        request = self.make_request(500)  # sous le seuil du niveau 2 : un seul niveau
+        engine = WorkflowEngine(request)
+        engine.submit(actor=self.employee)
+        request.refresh_from_db()
+
+        level_1_entry = request.snapshot_metadata["workflow_snapshot"][0]
+        self.assertEqual(level_1_entry["approver_ids"], [self.manager.id])
+        self.assertEqual(level_1_entry["active_approver_ids"], [self.manager.id])
+        self.assertIn(self.manager.id, engine.get_effective_approvers())
+        self.assertNotIn(self.director_delegate.id, engine.get_effective_approvers())
+
     def test_delegation_is_resolved_when_level_becomes_current(self):
         Delegation.objects.create(
             delegator=self.director,
