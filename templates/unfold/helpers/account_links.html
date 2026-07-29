@@ -1,9 +1,23 @@
-{% load i18n %}
-{# Surcharge du template Unfold d'origine (unfold/helpers/account_links.html) —
-   priorité assurée par TEMPLATES[0]['DIRS'] dans settings.py. Seul changement :
-   confirmation avant déconnexion (retour client) — le bouton d'origine
-   déconnectait immédiatement au clic, sans confirmation, contrairement au
-   bouton équivalent côté app (base.html, via la modale JS confirm-modal). #}
+{% load i18n unfold %}
+{% comment %}
+Surcharge du template Unfold d'origine (unfold/helpers/account_links.html) —
+priorité assurée par TEMPLATES[0]['DIRS'] dans settings.py. Seul changement :
+confirmation avant déconnexion (retour client) — le bouton d'origine
+déconnectait immédiatement au clic, sans confirmation, contrairement au
+bouton équivalent côté app (base.html, via la modale JS confirm-modal).
+
+Une première version utilisait le confirm() natif du navigateur — remplacé
+par une vraie modale dans le style Unfold (retour client : "je veux celui
+de django unfold même, c'est mieux côté design"), construite avec Alpine.js
+et les composants Unfold (button.html), en x-teleport="body" pour ne pas
+hériter d'un contexte d'empilement CSS du menu déroulant parent (transform
+sur les popovers Unfold, qui casserait un `position: fixed` classique —
+voir unfold/helpers/actions_row.html pour le même motif).
+
+Note : {# ... #} ne supporte pas le multi-lignes en Django (contrairement à
+{% comment %}), d'où ce choix — un bug déjà rencontré une première fois ici
+(le texte du commentaire s'affichait en clair dans la page).
+{% endcomment %}
 
 {% if site_url %}
     <a href="{{ site_url }}" class="mx-1 px-3 py-2 rounded-default hover:bg-base-100 hover:text-base-700 dark:hover:bg-base-700 dark:hover:text-base-200">
@@ -25,13 +39,41 @@
     {% endif %}
 {% endif %}
 
-<div class="border-t border-base-200 mt-1 pt-1 dark:border-base-700">
-    <form id="logout-form" method="post" action="{% url 'admin:logout' %}" class="mx-1"
-          onsubmit="return confirm('Confirmes-tu la déconnexion ?');">
-        {% csrf_token %}
+<div class="border-t border-base-200 mt-1 pt-1 dark:border-base-700" x-data="{ confirmLogoutOpen: false }">
+    <button type="button" x-on:click="confirmLogoutOpen = true"
+            class="bg-none flex cursor-pointer items-center px-3 py-1.5 text-left text-red-700 rounded-default w-full hover:bg-red-100 dark:hover:bg-red-500/20 dark:text-red-400 dark:hover:text-red-400">
+        {% trans "Log out" %} <span class="ml-auto material-symbols-outlined text-red-700 dark:text-red-400">logout</span>
+    </button>
 
-        <button type="submit" class="bg-none flex cursor-pointer items-center px-3 py-1.5 text-left text-red-700 rounded-default w-full hover:bg-red-100 dark:hover:bg-red-500/20 dark:text-red-400 dark:hover:text-red-400">
-            {% trans "Log out" %} <span class="ml-auto material-symbols-outlined text-red-700 dark:text-red-400">logout</span>
-        </button>
-    </form>
+    <template x-teleport="body">
+        <div x-cloak x-show="confirmLogoutOpen"
+             class="backdrop-blur-xs bg-base-900/20 bottom-0 fixed left-0 right-0 top-0 z-60 dark:bg-base-900/80"
+             x-on:keydown.escape.window="confirmLogoutOpen = false"></div>
+
+        <div x-cloak x-show="confirmLogoutOpen"
+             class="bottom-0 flex items-center justify-center left-0 right-0 fixed top-0 z-70"
+             x-on:keydown.escape.window="confirmLogoutOpen = false">
+            <div class="bg-white relative rounded-default p-6 w-sm dark:bg-base-800" x-on:click.outside="confirmLogoutOpen = false">
+                <h1 class="font-semibold text-base text-important tracking-tight mb-2">
+                    {% trans "Log out" %}
+                </h1>
+                <p class="leading-relaxed mb-6">
+                    {% trans "Are you sure you want to log out?" %}
+                </p>
+
+                <div class="flex flex-row justify-end gap-2">
+                    {% component "unfold/components/button.html" with variant="default" extra_attrs="x-on:click='confirmLogoutOpen = false'" %}
+                        {% trans "Cancel" %}
+                    {% endcomponent %}
+
+                    <form method="post" action="{% url 'admin:logout' %}">
+                        {% csrf_token %}
+                        {% component "unfold/components/button.html" with variant="danger" submit=1 %}
+                            {% trans "Log out" %}
+                        {% endcomponent %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </template>
 </div>

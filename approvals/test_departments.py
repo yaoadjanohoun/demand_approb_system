@@ -4,6 +4,7 @@ gérer ses propres groupes."""
 from django.contrib.auth.models import Group, Permission, User
 from django.core.management import call_command
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from django.core.exceptions import ValidationError
 
@@ -216,12 +217,19 @@ class AdminDashboardTests(TestCase):
         """Retour client : le bouton de déconnexion de l'admin (fourni par
         Unfold) déconnectait immédiatement au clic, sans confirmation,
         contrairement à l'équivalent côté app. Surchargé dans
-        templates/unfold/helpers/account_links.html."""
+        templates/unfold/helpers/account_links.html — d'abord avec un
+        confirm() natif du navigateur, puis remplacé par une modale dans
+        le style Unfold (retour client : "je veux celui de django unfold
+        même, c'est mieux côté design")."""
         superuser = User.objects.create_superuser("root3", password="x")
         self.client.force_login(superuser)
         response = self.client.get("/admin/")
-        self.assertContains(response, 'id="logout-form"')
-        self.assertContains(response, "onsubmit=\"return confirm(")
+        self.assertContains(response, "confirmLogoutOpen")
+        self.assertContains(response, "Are you sure you want to log out?")
+        # La vraie action de déconnexion doit rester un POST protégé par CSRF,
+        # pas un simple lien GET.
+        self.assertContains(response, f'action="{reverse("admin:logout")}"')
+        self.assertNotContains(response, "onsubmit=\"return confirm(")
 
 
 class SidebarPermissionFilteringTests(TestCase):
