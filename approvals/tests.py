@@ -161,6 +161,60 @@ class WorkflowEngineTests(TestCase):
         request.refresh_from_db()
         self.assertEqual(request.status, Request.Status.DRAFT)
 
+    def test_amount_criteria_uses_custom_amount_field_when_designated(self):
+        """Retour client : un type de demande dont le champ montant ne
+        s'appelle ni "montant" ni "amount" (ex: "cout" pour Formation) voyait
+        ses critères min_amount/max_amount ne jamais correspondre, en
+        silence — aucune erreur, juste aucun approbateur de ce niveau jamais
+        trouvé. form_schema.amount_field (Form Schema Builder, colonne
+        "Champ montant") corrige ça."""
+        request_type = RequestType.objects.create(
+            name="Formation", code="TRAINING",
+            form_schema={
+                "fields": [{"name": "cout", "type": "decimal", "required": True}],
+                "amount_field": "cout",
+            },
+        )
+        ApprovalRule.objects.create(
+            request_type=request_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+        ApprovalRule.objects.create(
+            request_type=request_type, level=2,
+            criteria={"min_amount": 500},
+            approvers_config={"type": "user", "user_id": self.director.id},
+        )
+        request = Request.objects.create(
+            request_type=request_type, requester=self.employee, data={"cout": 800},
+        )
+        WorkflowEngine(request).submit(actor=self.employee)
+        request.refresh_from_db()
+        levels = [entry["level"] for entry in request.snapshot_metadata["workflow_snapshot"]]
+        self.assertEqual(levels, [1, 2])  # le niveau 2 (montant >= 500) a bien matché
+
+    def test_amount_criteria_without_amount_field_designated_never_matches(self):
+        """Sans amount_field renseigné, comportement historique inchangé
+        (repli sur "montant"/"amount") — non-régression du bug ci-dessus,
+        vérifie qu'il est bien silencieux (pas d'erreur) et prévisible."""
+        request_type = RequestType.objects.create(
+            name="Formation sans amount_field", code="TRAINING_NOAF",
+            form_schema={"fields": [{"name": "cout", "type": "decimal", "required": True}]},
+        )
+        ApprovalRule.objects.create(
+            request_type=request_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+        ApprovalRule.objects.create(
+            request_type=request_type, level=2,
+            criteria={"min_amount": 500},
+            approvers_config={"type": "user", "user_id": self.director.id},
+        )
+        request = Request.objects.create(
+            request_type=request_type, requester=self.employee, data={"cout": 800},
+        )
+        WorkflowEngine(request).submit(actor=self.employee)
+        request.refresh_from_db()
+        levels = [entry["level"] for entry in request.snapshot_metadata["workflow_snapshot"]]
+        self.assertEqual(levels, [1])  # niveau 2 ignoré : "cout" jamais lu sans amount_field
+
     def test_rule_change_after_submission_does_not_affect_snapshot(self):
         request = self.make_request(2500)
         engine = WorkflowEngine(request)

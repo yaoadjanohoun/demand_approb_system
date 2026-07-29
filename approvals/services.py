@@ -142,9 +142,20 @@ class WorkflowEngine:
         return True
 
     def _get_amount(self):
+        """Retour client : un type de demande dont le champ montant ne
+        s'appelait ni "montant" ni "amount" (ex: "cout" pour Formation)
+        voyait ses critères min_amount/max_amount ne jamais correspondre,
+        silencieusement — le champ désigné explicitement dans
+        RequestType.form_schema.amount_field (Form Schema Builder, colonne
+        "Champ montant") prime ; "montant"/"amount" restent en repli pour
+        les types configurés avant l'ajout de ce champ."""
         data = self.request.data or {}
-        for key in ("montant", "amount"):
-            if key in data:
+        form_schema = self.request.request_type.form_schema or {}
+        amount_field = form_schema.get("amount_field")
+        keys = [amount_field] if amount_field else []
+        keys += ["montant", "amount"]
+        for key in keys:
+            if key and key in data:
                 try:
                     return float(data[key])
                 except (TypeError, ValueError):

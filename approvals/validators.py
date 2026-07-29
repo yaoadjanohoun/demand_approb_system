@@ -25,6 +25,14 @@ FORM_SCHEMA = {  # Schéma A — RequestType.form_schema
                 },
             },
         },
+        # Quel champ du formulaire représente le montant de la demande, pour les
+        # critères d'approbation min_amount/max_amount (ApprovalRule.criteria) —
+        # retour client : WorkflowEngine._get_amount() ne cherchait auparavant que
+        # les noms techniques "montant"/"amount" en dur, donc un type de demande
+        # dont le champ montant portait un autre nom (ex: "cout") voyait ses
+        # règles par montant ne jamais correspondre, silencieusement (aucune
+        # erreur, juste aucun approbateur de ce niveau jamais trouvé).
+        "amount_field": {"type": "string"},
     },
 }
 

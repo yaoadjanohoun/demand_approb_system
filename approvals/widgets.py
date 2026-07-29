@@ -40,9 +40,11 @@ class FormSchemaBuilderWidget(forms.Textarea):
         textarea_html = super().render(name, value, attrs, renderer)
         widget_id = (attrs or {}).get("id", f"id_{name}")
         try:
-            initial_fields = json.loads(value).get("fields", []) if value else []
+            parsed = json.loads(value) if value else {}
         except (TypeError, ValueError):
-            initial_fields = []
+            parsed = {}
+        initial_fields = parsed.get("fields", [])
+        initial_amount_field = parsed.get("amount_field", "")
 
         return mark_safe(f"""
 <div class="fsb-builder" data-textarea-id="{widget_id}" style="max-width: 720px;">
@@ -53,17 +55,24 @@ class FormSchemaBuilderWidget(forms.Textarea):
         <th style="text-align:left; padding:4px;">Label affiché</th>
         <th style="text-align:left; padding:4px;">Type</th>
         <th style="text-align:left; padding:4px;">Obligatoire</th>
+        <th style="text-align:left; padding:4px;">Champ montant</th>
         <th></th>
       </tr>
     </thead>
     <tbody class="fsb-rows"></tbody>
   </table>
   <button type="button" class="fsb-add" style="margin-top:8px;">+ Ajouter un champ</button>
+  <p style="color:#6b7280; font-size:0.85em; margin-top:6px;">
+    "Champ montant" : à cocher sur le champ numérique utilisé par les critères d'approbation
+    "Montant minimum"/"Montant maximum" (Règles d'approbation) — sinon ces critères ne
+    correspondront jamais.
+  </p>
   <div style="display:none;">{textarea_html}</div>
 </div>
 <script>
 (function() {{
   const TYPE_OPTIONS = {json.dumps(FIELD_TYPE_CHOICES)};
+  const AMOUNT_FIELD_RADIO_NAME = "fsb-amount-field-{widget_id}";
   const container = document.currentScript.previousElementSibling;
   const textarea = document.getElementById("{widget_id}");
   const rowsBody = container.querySelector(".fsb-rows");
@@ -114,39 +123,69 @@ class FormSchemaBuilderWidget(forms.Textarea):
     reqInput.checked = !!field.required;
     reqTd.appendChild(reqInput);
 
+    const amountTd = document.createElement("td");
+    amountTd.style.textAlign = "center";
+    const amountInput = document.createElement("input");
+    amountInput.type = "radio";
+    amountInput.name = AMOUNT_FIELD_RADIO_NAME;
+    amountInput.className = "fsb-amount-field";
+    amountInput.checked = !!field.isAmountField;
+    amountTd.appendChild(amountInput);
+
     const delTd = document.createElement("td");
     const delBtn = document.createElement("button");
     delBtn.type = "button";
     delBtn.textContent = "Supprimer";
     delBtn.className = "fsb-delete";
-    delBtn.onclick = function() {{ tr.remove(); }};
+    delBtn.onclick = function() {{
+      const wasAmountField = amountInput.checked;
+      tr.remove();
+      if (wasAmountField) {{
+        // Le champ montant vient d'être supprimé : plus aucun champ désigné
+        // (mieux vaut ça qu'un radio "orphelin" pointant vers un champ disparu).
+      }}
+    }};
     delTd.appendChild(delBtn);
 
     tr.appendChild(nameTd);
     tr.appendChild(labelTd);
     tr.appendChild(typeTd);
     tr.appendChild(reqTd);
+    tr.appendChild(amountTd);
     tr.appendChild(delTd);
     return tr;
   }}
 
+  const initialAmountField = {json.dumps(initial_amount_field)};
   const initial = {json.dumps(initial_fields)};
-  initial.forEach(function(f) {{ rowsBody.appendChild(makeRow(f)); }});
+  initial.forEach(function(f) {{
+    f.isAmountField = !!initialAmountField && f.name === initialAmountField;
+    rowsBody.appendChild(makeRow(f));
+  }});
 
   addBtn.addEventListener("click", function() {{
     rowsBody.appendChild(makeRow());
   }});
 
   function sync() {{
+    let amountField = "";
     const fields = Array.from(rowsBody.querySelectorAll(".fsb-row")).map(function(tr) {{
+      const name = tr.querySelector(".fsb-name").value.trim();
+      if (tr.querySelector(".fsb-amount-field").checked && name) {{
+        amountField = name;
+      }}
       return {{
-        name: tr.querySelector(".fsb-name").value.trim(),
+        name: name,
         label: tr.querySelector(".fsb-label").value.trim(),
         type: tr.querySelector(".fsb-type").value,
         required: tr.querySelector(".fsb-required").checked,
       }};
     }}).filter(function(f) {{ return f.name !== ""; }});
-    textarea.value = JSON.stringify({{fields: fields}});
+    const payload = {{fields: fields}};
+    if (amountField) {{
+      payload.amount_field = amountField;
+    }}
+    textarea.value = JSON.stringify(payload);
   }}
 
   const form = container.closest("form");
