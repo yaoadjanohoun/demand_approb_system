@@ -52,8 +52,7 @@ Voir [`TEST_RESULTS.md`](TEST_RESULTS.md) pour un dernier relevé d'exécution.
 
 | Document | Contenu |
 |---|---|
-| [`Documentation Complète Illustrée.md`](Documentation%20Complète%20Illustrée.md) | Visite guidée écran par écran (demandeur, approbateur, admin), avec captures d'écran |
-| [`Manuel d'Administration Fonctionnel.txt`](Manuel%20d'Administration%20Fonctionnel.txt) | Guide de l'admin fonctionnel (configuration des types de demande, règles, délégations) |
+| [`Guide Utilisateur.docx`](Guide%20Utilisateur.docx) | Visite guidée écran par écran (demandeur, approbateur, admin fonctionnel) |
 | [`Les Spécifications Techniques.txt`](Les%20Spécifications%20Techniques.txt) | Architecture, contraintes de déploiement, choix techniques |
 | [`Guide de Test de Staging.txt`](Guide%20de%20Test%20de%20Staging.txt) | Pour la DSI : valider IIS/SQL Server/Active Directory en conditions réelles avant mise en production |
 | [`Diagrammes de Flux.txt`](Diagrammes%20de%20Flux.txt) | Circuits de soumission/approbation |
@@ -62,7 +61,6 @@ Voir [`TEST_RESULTS.md`](TEST_RESULTS.md) pour un dernier relevé d'exécution.
 | [`Plan de Gestion des Risques.txt`](Plan%20de%20Gestion%20des%20Risques.txt) | Risques identifiés et mitigations |
 | [`Documents de Continuité et de Reprise.txt`](Documents%20de%20Continuité%20et%20de%20Reprise.txt) | Sauvegarde et reprise après sinistre |
 | [`Documents Juridiques et de Conformité.txt`](Documents%20Juridiques%20et%20de%20Conformité.txt) | Conformité et aspects juridiques |
-| [`Documents d'Expérience Utilisateur.txt`](Documents%20d'Expérience%20Utilisateur.txt) | Parcours utilisateur |
 | [`Documents de Connaissance et de Capitalisation.txt`](Documents%20de%20Connaissance%20et%20de%20Capitalisation.txt) | Décisions et retours d'expérience du projet |
 
 ## Configuration
