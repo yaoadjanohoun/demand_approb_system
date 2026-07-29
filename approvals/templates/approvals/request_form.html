@@ -35,6 +35,7 @@
                 <label for="id_attachments">Pièces jointes (optionnel)</label>
                 <input type="file" name="attachments" id="id_attachments" multiple accept=".jpg,.jpeg,.png,.pdf">
                 <p class="field-help">JPG, PNG ou PDF, 5 Mo maximum par fichier — pour appuyer ta demande (justificatif, fiche médicale, facture...).</p>
+                <p id="attachments-error" class="field-error" style="display:none; color:#c1362b;"></p>
                 {% if existing_attachments %}
                     <ul class="attachment-list">
                         {% for attachment in existing_attachments %}
@@ -55,4 +56,47 @@
         </p>
     </form>
 </div>
+<script>
+    // Vérifie type + taille avant l'envoi (retour client : un fichier trop
+    // volumineux ou du mauvais type partait quand même vers le serveur, où il
+    // pouvait être bloqué par nginx avant même d'atteindre Django — page
+    // d'erreur brute et peu claire au lieu d'un message immédiat).
+    (function () {
+        var input = document.getElementById('id_attachments');
+        var errorBox = document.getElementById('attachments-error');
+        var form = input ? input.closest('form') : null;
+        if (!input || !errorBox || !form) return;
+
+        var ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'pdf'];
+        var MAX_SIZE_BYTES = 5 * 1024 * 1024;
+
+        function validateFiles() {
+            var problems = [];
+            Array.prototype.forEach.call(input.files, function (file) {
+                var ext = file.name.split('.').pop().toLowerCase();
+                if (ALLOWED_EXTENSIONS.indexOf(ext) === -1) {
+                    problems.push(file.name + " : type de fichier non autorisé (JPG, PNG ou PDF uniquement).");
+                } else if (file.size > MAX_SIZE_BYTES) {
+                    problems.push(file.name + " : dépasse 5 Mo (" + (file.size / (1024 * 1024)).toFixed(1) + " Mo).");
+                }
+            });
+            if (problems.length) {
+                errorBox.textContent = problems.join(' ');
+                errorBox.style.display = 'block';
+            } else {
+                errorBox.style.display = 'none';
+                errorBox.textContent = '';
+            }
+            return problems.length === 0;
+        }
+
+        input.addEventListener('change', validateFiles);
+        form.addEventListener('submit', function (event) {
+            if (!validateFiles()) {
+                event.preventDefault();
+                errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    })();
+</script>
 {% endblock %}

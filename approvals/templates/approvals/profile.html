@@ -46,10 +46,12 @@
 
 <div class="card">
     <div class="card-title">Photo de profil</div>
-    <form method="post" enctype="multipart/form-data">
+    <form method="post" enctype="multipart/form-data" id="photo-form">
         {% csrf_token %}
         <input type="hidden" name="action" value="update_photo">
         {{ photo_form.as_p }}
+        <p class="field-help">JPG ou PNG, 2 Mo maximum.</p>
+        <p id="photo-error" class="field-error" style="display:none; color:#c1362b;"></p>
         <button type="submit" class="btn btn-primary" style="margin-top:0.5rem;">Enregistrer la photo</button>
     </form>
     {% if profile.photo %}
@@ -66,4 +68,42 @@
     <p style="margin:0 0 0.75rem;">Changer ton mot de passe :</p>
     <a class="btn btn-secondary" href="{% url 'password_reset' %}">Réinitialiser mon mot de passe</a>
 </div>
+<script>
+    // Même principe que sur le formulaire de demande (request_form.html) :
+    // vérifier avant l'envoi plutôt que de laisser un fichier trop volumineux
+    // ou du mauvais type partir vers le serveur.
+    (function () {
+        var input = document.getElementById('id_photo');
+        var errorBox = document.getElementById('photo-error');
+        var form = document.getElementById('photo-form');
+        if (!input || !errorBox || !form) return;
+
+        var ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png'];
+        var MAX_SIZE_BYTES = 2 * 1024 * 1024;
+
+        function validateFile() {
+            var file = input.files[0];
+            var problem = null;
+            if (file) {
+                var ext = file.name.split('.').pop().toLowerCase();
+                if (ALLOWED_EXTENSIONS.indexOf(ext) === -1) {
+                    problem = "Type de fichier non autorisé (JPG ou PNG uniquement).";
+                } else if (file.size > MAX_SIZE_BYTES) {
+                    problem = "Dépasse 2 Mo (" + (file.size / (1024 * 1024)).toFixed(1) + " Mo).";
+                }
+            }
+            errorBox.textContent = problem || '';
+            errorBox.style.display = problem ? 'block' : 'none';
+            return !problem;
+        }
+
+        input.addEventListener('change', validateFile);
+        form.addEventListener('submit', function (event) {
+            if (!validateFile()) {
+                event.preventDefault();
+                errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        });
+    })();
+</script>
 {% endblock %}
