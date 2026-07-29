@@ -72,6 +72,24 @@ def validate_approvers_config(value):
     _validate(value, APPROVERS_CONFIG_SCHEMA, "approvers_config")
 
 
+_MAX_CONSECUTIVE_REPEATS = 3  # "0000" (4x) refusé, "AAA" (3x, ex: sigle) accepté
+
+
+def _first_excessive_run(value, max_run=_MAX_CONSECUTIVE_REPEATS):
+    """Retourne le caractère répété plus de max_run fois d'affilée, ou None.
+    Retour déploiement : un nom composé uniquement de caractères autorisés
+    individuellement (lettres/chiffres) peut quand même être du remplissage
+    n'importe quoi, ex: "Ip Fictive0000000000000005" — repéré par sa longue
+    suite du même chiffre, pas par un caractère interdit en soi."""
+    run_char, run_length = None, 0
+    for ch in value:
+        run_length = run_length + 1 if ch == run_char else 1
+        run_char = ch
+        if run_length > max_run:
+            return ch
+    return None
+
+
 _ALLOWED_NAME_EXTRA_CHARS = set(" -'’")
 
 
@@ -89,6 +107,9 @@ def validate_person_name(value):
             "Ne peut contenir que des lettres, espaces, apostrophes et tirets "
             f"(caractère(s) non autorisé(s) : {' '.join(invalid)})."
         )
+    repeated = _first_excessive_run(value)
+    if repeated:
+        raise ValidationError(f'Trop de "{repeated}" d\'affilée — ce n\'est pas un nom valide.')
 
 
 _ALLOWED_ENTITY_EXTRA_CHARS = set(" '&().,-")
@@ -107,3 +128,6 @@ def validate_entity_name(value):
     invalid = sorted({ch for ch in value if not (ch.isalnum() or ch in _ALLOWED_ENTITY_EXTRA_CHARS)})
     if invalid:
         raise ValidationError(f"Caractère(s) non autorisé(s) : {' '.join(invalid)}.")
+    repeated = _first_excessive_run(value)
+    if repeated:
+        raise ValidationError(f'Trop de "{repeated}" d\'affilée — ce n\'est pas un nom valide.')
