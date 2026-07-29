@@ -193,9 +193,18 @@ class CriteriaBuilderWidget(forms.Textarea):
 <script>
 (function() {{
   if (!window.__cbBuilderInit) {{
+    // WeakSet plutôt qu'un attribut HTML (ex: data-cb-initialized) : Unfold
+    // clone le formulaire vide caché ("empty-form") pour créer une nouvelle
+    // ligne (cloneNode) — un attribut posé sur ce modèle caché au chargement
+    // de la page se retrouvait copié tel quel sur chaque nouvelle ligne
+    // clonée, qui semblait donc "déjà initialisée" sans jamais l'avoir été
+    // (retour client : le bouton de la ligne ajoutée restait inopérant même
+    // après le premier correctif "formset:added"). Un WeakSet suit l'identité
+    // réelle du nœud DOM, jamais copiée par un clone.
+    window.__cbInitializedNodes = new WeakSet();
     window.__cbBuilderInit = function(container) {{
-      if (container.dataset.cbInitialized) return;
-      container.dataset.cbInitialized = "1";
+      if (window.__cbInitializedNodes.has(container)) return;
+      window.__cbInitializedNodes.add(container);
 
       const CRITERION_TYPES = window.__cbCriterionTypes;
       const DEPARTMENTS = window.__cbDepartments;
@@ -403,9 +412,14 @@ class ApproversConfigBuilderWidget(forms.Textarea):
 <script>
 (function() {{
   if (!window.__acbBuilderInit) {{
+    // Même correctif que CriteriaBuilderWidget (voir son commentaire) : un
+    // attribut HTML posé sur le formulaire vide caché se retrouvait copié
+    // sur chaque nouvelle ligne clonée par Unfold, qui semblait donc "déjà
+    // initialisée" sans jamais l'avoir été.
+    window.__acbInitializedNodes = new WeakSet();
     window.__acbBuilderInit = function(container) {{
-      if (container.dataset.acbInitialized) return;
-      container.dataset.acbInitialized = "1";
+      if (window.__acbInitializedNodes.has(container)) return;
+      window.__acbInitializedNodes.add(container);
 
       const TYPE_OPTIONS = window.__acbTypeOptions;
       const USERS = window.__acbUsers;
