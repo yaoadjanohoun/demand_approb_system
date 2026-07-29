@@ -2,8 +2,6 @@
 
 Schemas match "Dictionnaire de Données" section 2 (Schémas A, B, C).
 """
-import re
-
 import jsonschema
 from django.core.exceptions import ValidationError
 
@@ -93,18 +91,19 @@ def validate_person_name(value):
         )
 
 
-_ENTITY_NAME_FORBIDDEN_RE = re.compile(r'[<>{}\[\]\\|~^`"]')
+_ALLOWED_ENTITY_EXTRA_CHARS = set(" '&().,-")
 
 
 def validate_entity_name(value):
     """Nom d'une entité (département, site, type de demande, configuration
-    email...) : plus permissif que validate_person_name (chiffres, "&", "/",
-    tirets, parenthèses tous légitimes ici — ex: "R&D", "Site 12") mais
-    bloque quand même les cas manifestement invalides : aucune lettre/chiffre
-    du tout, ou des caractères qui n'ont jamais leur place dans un nom
-    (chevrons, accolades, crochets, barre verticale...)."""
+    email...) : plus permissif que validate_person_name (chiffres, "&",
+    parenthèses, virgule, point tous légitimes ici — ex: "R&D", "Site 12",
+    "Gmail (test)") mais reste une liste blanche — retour déploiement :
+    une première version en liste noire (ne bloquait que quelques caractères
+    "évidemment" invalides) laissait passer des suites de "/", "*", "+", "-",
+    "!" sans aucune lettre/chiffre entre eux (ex: "test////...!!!!")."""
     if not value or not any(ch.isalnum() for ch in value):
         raise ValidationError("Doit contenir au moins une lettre ou un chiffre.")
-    match = _ENTITY_NAME_FORBIDDEN_RE.search(value)
-    if match:
-        raise ValidationError(f'Caractère non autorisé : "{match.group()}".')
+    invalid = sorted({ch for ch in value if not (ch.isalnum() or ch in _ALLOWED_ENTITY_EXTRA_CHARS)})
+    if invalid:
+        raise ValidationError(f"Caractère(s) non autorisé(s) : {' '.join(invalid)}.")

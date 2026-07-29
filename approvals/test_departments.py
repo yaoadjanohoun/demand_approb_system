@@ -22,6 +22,15 @@ class DepartmentSiteModelTests(TestCase):
         with self.assertRaises(ValidationError):
             Department(name="////////").full_clean()
 
+    def test_symbol_spam_around_letters_rejected(self):
+        """Retour déploiement : une première version du validateur (liste
+        noire) laissait passer ce genre de saisie tant qu'il restait au moins
+        une lettre/chiffre quelque part dans la chaîne."""
+        with self.assertRaises(ValidationError):
+            Site(name="test///////////////////*****************-*******!!!!!").full_clean()
+        with self.assertRaises(ValidationError):
+            Department(name="test0000000000000+++++++++++-----************!!!!!!!!!!!!").full_clean()
+
     def test_name_with_common_business_characters_allowed(self):
         # "R&D", des chiffres, des parenthèses... : légitimes pour un nom
         # d'entité (contrairement à un prénom/nom de personne, plus strict).
