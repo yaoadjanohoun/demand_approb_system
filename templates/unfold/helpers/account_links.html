@@ -14,6 +14,14 @@ hériter d'un contexte d'empilement CSS du menu déroulant parent (transform
 sur les popovers Unfold, qui casserait un `position: fixed` classique —
 voir unfold/helpers/actions_row.html pour le même motif).
 
+Important : <template x-teleport="body"> ne doit contenir qu'UN SEUL élément
+racine — vérifié empiriquement (rien ne s'affichait au clic) et confirmé en
+inspectant toutes les autres utilisations de x-teleport dans Unfold
+(display_dropdown.html, related_widget_wrapper.html, tab_action.html...) :
+aucune n'a jamais plus d'un enfant direct. Avec deux <div> frères (fond +
+boîte centrée), Alpine ne téléportait que le premier et perdait le second
+silencieusement, sans erreur console. D'où l'unique <div> englobant ci-dessous.
+
 Note : {# ... #} ne supporte pas le multi-lignes en Django (contrairement à
 {% comment %}), d'où ce choix — un bug déjà rencontré une première fois ici
 (le texte du commentaire s'affichait en clair dans la page).
@@ -46,32 +54,34 @@ Note : {# ... #} ne supporte pas le multi-lignes en Django (contrairement à
     </button>
 
     <template x-teleport="body">
-        <div x-cloak x-show="confirmLogoutOpen"
-             class="backdrop-blur-xs bg-base-900/20 bottom-0 fixed left-0 right-0 top-0 z-60 dark:bg-base-900/80"
-             x-on:keydown.escape.window="confirmLogoutOpen = false"></div>
+        <div>
+            <div x-cloak x-show="confirmLogoutOpen"
+                 class="backdrop-blur-xs bg-base-900/20 bottom-0 fixed left-0 right-0 top-0 z-60 dark:bg-base-900/80"
+                 x-on:keydown.escape.window="confirmLogoutOpen = false"></div>
 
-        <div x-cloak x-show="confirmLogoutOpen"
-             class="bottom-0 flex items-center justify-center left-0 right-0 fixed top-0 z-70"
-             x-on:keydown.escape.window="confirmLogoutOpen = false">
-            <div class="bg-white relative rounded-default p-6 w-sm dark:bg-base-800" x-on:click.outside="confirmLogoutOpen = false">
-                <h1 class="font-semibold text-base text-important tracking-tight mb-2">
-                    {% trans "Log out" %}
-                </h1>
-                <p class="leading-relaxed mb-6">
-                    {% trans "Are you sure you want to log out?" %}
-                </p>
+            <div x-cloak x-show="confirmLogoutOpen"
+                 class="bottom-0 flex items-center justify-center left-0 right-0 fixed top-0 z-70"
+                 x-on:keydown.escape.window="confirmLogoutOpen = false">
+                <div class="bg-white relative rounded-default p-6 w-sm dark:bg-base-800" x-on:click.outside="confirmLogoutOpen = false">
+                    <h1 class="font-semibold text-base text-important tracking-tight mb-2">
+                        {% trans "Log out" %}
+                    </h1>
+                    <p class="leading-relaxed mb-6">
+                        {% trans "Are you sure you want to log out?" %}
+                    </p>
 
-                <div class="flex flex-row justify-end gap-2">
-                    {% component "unfold/components/button.html" with variant="default" extra_attrs="x-on:click='confirmLogoutOpen = false'" %}
-                        {% trans "Cancel" %}
-                    {% endcomponent %}
-
-                    <form method="post" action="{% url 'admin:logout' %}">
-                        {% csrf_token %}
-                        {% component "unfold/components/button.html" with variant="danger" submit=1 %}
-                            {% trans "Log out" %}
+                    <div class="flex flex-row justify-end gap-2">
+                        {% component "unfold/components/button.html" with variant="default" extra_attrs="x-on:click='confirmLogoutOpen = false'" %}
+                            {% trans "Cancel" %}
                         {% endcomponent %}
-                    </form>
+
+                        <form method="post" action="{% url 'admin:logout' %}">
+                            {% csrf_token %}
+                            {% component "unfold/components/button.html" with variant="danger" submit=1 %}
+                                {% trans "Log out" %}
+                            {% endcomponent %}
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
