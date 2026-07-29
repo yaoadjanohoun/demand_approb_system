@@ -13,6 +13,7 @@ envoi est protégé par un try/except journalisé.
 """
 import logging
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 
@@ -50,7 +51,10 @@ def _send(subject, message, recipients):
 
 
 def _request_path(req):
-    return f"/{req.pk}/"
+    # Lien absolu (SITE_URL, settings.py) : un chemin relatif comme
+    # "/44a0825a-.../" est inutilisable depuis un client email, hors du
+    # navigateur où on était connecté (retour client).
+    return f"{settings.SITE_URL}/{req.pk}/"
 
 
 def _requester_label(req):

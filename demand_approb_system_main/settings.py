@@ -46,6 +46,14 @@ DEBUG = env.bool('DJANGO_DEBUG', default=True)
 
 ALLOWED_HOSTS = env.list('DJANGO_ALLOWED_HOSTS', default=['127.0.0.1', 'localhost'])
 
+# Utilisé pour construire des liens absolus dans les emails de notification
+# (approvals/notifications.py) : ces emails sont envoyés depuis des tâches de
+# fond (WorkflowEngine), sans objet HttpRequest disponible pour déduire le
+# domaine — sans ça, le lien envoyé était juste un chemin relatif du type
+# "/44a0825a-.../.../" (retour client : un lien pareil est inutilisable
+# depuis un client email, en dehors du navigateur où on était connecté).
+SITE_URL = env('SITE_URL', default='http://127.0.0.1:8000').rstrip('/')
+
 # La limite par défaut de Django pour la taille d'une requête (2,5 Mo) est
 # plus basse que ATTACHMENT_MAX_SIZE_MB (5 Mo, voir approvals/models.py) :
 # sans ce réglage, une pièce jointe pourtant autorisée par le modèle était

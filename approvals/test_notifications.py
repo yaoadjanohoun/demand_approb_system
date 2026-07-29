@@ -99,6 +99,20 @@ class NotificationTests(TestCase):
         self.assertIn("employee1@example.com", mail.outbox[0].to)
         self.assertIn("pièce jointe manquante", mail.outbox[0].body)
 
+    def test_email_link_is_absolute_not_a_bare_path(self):
+        """Retour client : le lien envoyé par email était un chemin relatif
+        (ex: "/44a0825a-.../") — inutilisable depuis un client email, en
+        dehors du navigateur où on était connecté. SITE_URL (settings.py)
+        doit préfixer le lien."""
+        from django.conf import settings
+
+        req = self.make_request(500)
+        WorkflowEngine(req).submit()
+
+        requester_email = next(m for m in mail.outbox if "employee1@example.com" in m.to)
+        self.assertIn(f"{settings.SITE_URL}/{req.pk}/", requester_email.body)
+        self.assertNotIn(f" /{req.pk}/", requester_email.body)
+
     def test_notification_never_raises_when_recipient_has_no_email(self):
         req = self.make_request(500)
         WorkflowEngine(req).submit()
