@@ -141,6 +141,27 @@ class WorkflowEngine:
 
         return True
 
+    def missing_manager_candidate(self):
+        """Vrai si la demande ne peut pas être soumise précisément parce
+        qu'une règle de niveau 1 de type "manager" (sans utilisateur de
+        repli configuré) ne trouve personne, faute de manager sur le profil
+        du demandeur — retour client : un nouvel employé sans manager, dont
+        personne (admin, directeur, délégué...) ne peut corriger le profil
+        parce que tout le monde est absent en même temps. Sert à ne
+        proposer le choix ponctuel d'un approbateur de secours que dans ce
+        cas précis, pas pour les autres causes de blocage (groupe vide,
+        type d'approbateur non supporté...) où ça ne réglerait rien."""
+        profile = getattr(self.request.requester, "profile", None)
+        if profile and profile.manager_id:
+            return False
+        rules = ApprovalRule.objects.filter(
+            request_type_id=self.request.request_type_id, is_active=True, level=1,
+        )
+        return any(
+            self._matches(rule.criteria) and rule.approvers_config.get("type") == "manager"
+            for rule in rules
+        )
+
     def _get_amount(self):
         """Retour client : un type de demande dont le champ montant ne
         s'appelait ni "montant" ni "amount" (ex: "cout" pour Formation)

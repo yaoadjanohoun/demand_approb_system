@@ -8,11 +8,13 @@ WorkflowEngine seul ne pouvaient pas détecter ça : le moteur fonctionnait
 très bien, c'est l'enchaînement décision -> redirection -> permission de vue
 qui était cassé.
 """
+import datetime
 import shutil
 import tempfile
 
 from django.contrib.auth.models import User
 from django.test import Client, TestCase, override_settings
+from django.utils import timezone
 
 from .models import ApprovalRule, Request, RequestAttachment, RequestType, UserProfile
 
@@ -807,3 +809,109 @@ class Handler400Tests(TestCase):
         response = handler400(self._request(), exception=Exception("détail interne sensible"))
         self.assertEqual(response.status_code, 400)
         self.assertNotIn("détail interne sensible", response.content.decode())
+
+
+class ApproverFallbackTests(TestCase):
+    """Retour client : un nouvel employé sans manager, quand personne (admin,
+    directeur, délégué...) n'est disponible pour corriger son profil, doit
+    pouvoir choisir lui-même un approbateur de secours plutôt que rester
+    bloqué. Devient son manager permanent une fois choisi."""
+
+    def setUp(self):
+        self.no_manager_user = User.objects.create_user(
+            "nicolas", password="x", first_name="Nicolas", last_name="Nouveau",
+        )
+        self.staff_active_today = User.objects.create_user(
+            "admin_fonc", password="x", first_name="Alice", last_name="Admin", is_staff=True,
+        )
+        self.staff_inactive = User.objects.create_user(
+            "admin_inactif", password="x", first_name="Bob", last_name="Inactif", is_staff=True,
+        )
+        UserProfile.objects.create(
+            user=self.staff_active_today, last_seen_at=timezone.now(),
+        )
+        # Simple demandeur : n'a aucune autorité d'approbation, ne doit
+        # jamais apparaître comme candidat.
+        self.plain_employee = User.objects.create_user("employee_lambda", password="x")
+
+        self.request_type = RequestType.objects.create(
+            name="Congés", code="LEAVE", form_schema={"fields": []},
+        )
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+        self.client.login(username="nicolas", password="x")
+
+    def test_submitting_without_manager_shows_approver_picker(self):
+        response = self.client.post(
+            f"/new/{self.request_type.id}/", {"action": "submit"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Choisis un approbateur pour continuer")
+        self.assertContains(response, "Alice Admin")
+        # Un simple demandeur (aucune autorité d'approbation) n'est jamais candidat.
+        self.assertNotContains(response, "employee_lambda")
+
+    def test_choosing_an_approver_submits_and_sets_permanent_manager(self):
+        response = self.client.post(
+            f"/new/{self.request_type.id}/",
+            {"action": "submit", "chosen_approver_id": self.staff_active_today.id},
+            follow=True,
+        )
+        self.assertContains(response, "Demande soumise avec succès")
+
+        profile = UserProfile.objects.get(user=self.no_manager_user)
+        self.assertEqual(profile.manager_id, self.staff_active_today.id)
+
+        # Une prochaine demande ne redemande plus le choix : le manager est déjà assigné,
+        # donc la soumission réussit directement (redirection), sans repasser par le sélecteur.
+        response2 = self.client.post(f"/new/{self.request_type.id}/", {"action": "submit"})
+        self.assertEqual(response2.status_code, 302)
+
+    def test_cannot_choose_a_plain_employee_as_approver(self):
+        """Un ID choisi qui ne correspond à aucun candidat légitime (ex:
+        falsifié) est ignoré — retombe sur le sélecteur, ne l'assigne pas."""
+        response = self.client.post(
+            f"/new/{self.request_type.id}/",
+            {"action": "submit", "chosen_approver_id": self.plain_employee.id},
+        )
+        self.assertContains(response, "Choisis un approbateur pour continuer")
+        profile = UserProfile.objects.get(user=self.no_manager_user)
+        self.assertIsNone(profile.manager_id)
+
+    def test_falls_back_to_all_candidates_when_no_one_active_today(self):
+        """Si personne n'a navigué aujourd'hui, la liste complète des
+        candidats potentiels s'affiche plutôt qu'un blocage total."""
+        UserProfile.objects.filter(user=self.staff_active_today).update(last_seen_at=None)
+        response = self.client.post(f"/new/{self.request_type.id}/", {"action": "submit"})
+        self.assertContains(response, "Alice Admin")
+        self.assertContains(response, "Bob Inactif")
+        self.assertContains(response, "pas d'activité aujourd'hui")
+
+
+class TrackLastSeenMiddlewareTests(TestCase):
+    def test_first_authenticated_request_creates_profile_with_last_seen(self):
+        user = User.objects.create_user("freshuser", password="x")
+        self.assertFalse(UserProfile.objects.filter(user=user).exists())
+        self.client.login(username="freshuser", password="x")
+        self.client.get("/")
+        profile = UserProfile.objects.get(user=user)
+        self.assertIsNotNone(profile.last_seen_at)
+
+    def test_recent_last_seen_is_not_rewritten_on_every_request(self):
+        user = User.objects.create_user("throttleduser", password="x")
+        stamp = timezone.now() - datetime.timedelta(minutes=1)
+        UserProfile.objects.create(user=user, last_seen_at=stamp)
+        self.client.login(username="throttleduser", password="x")
+        self.client.get("/")
+        profile = UserProfile.objects.get(user=user)
+        self.assertEqual(profile.last_seen_at, stamp)
+
+    def test_stale_last_seen_is_refreshed(self):
+        user = User.objects.create_user("staleuser", password="x")
+        stale = timezone.now() - datetime.timedelta(hours=1)
+        UserProfile.objects.create(user=user, last_seen_at=stale)
+        self.client.login(username="staleuser", password="x")
+        self.client.get("/")
+        profile = UserProfile.objects.get(user=user)
+        self.assertGreater(profile.last_seen_at, stale)

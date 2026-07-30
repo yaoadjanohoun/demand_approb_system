@@ -100,6 +100,14 @@ class UserProfile(models.Model):
         help_text="JPG ou PNG, 2 Mo maximum.",
     )
 
+    # Mis à jour par TrackLastSeenMiddleware à chaque requête authentifiée
+    # (throttlé, voir le middleware) — sert à proposer un approbateur de
+    # secours "actif aujourd'hui" quand un demandeur n'a personne pour
+    # approuver ses demandes (retour client : nouvel employé sans manager,
+    # et tous les admins/managers/délégués potentiels sont absents en même
+    # temps — personne ne peut lui assigner un manager dans l'admin).
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+
     def __str__(self):
         return f"Profil de {self.user}"
 
@@ -439,7 +447,7 @@ class EmailToken(models.Model):
 
     LIFETIMES = {
         Purpose.EMAIL_CONFIRM: 60 * 60 * 48,   # 48h pour confirmer une inscription
-        Purpose.LOGIN_CONFIRM: 60 * 15,        # 15 min pour un lien de connexion
+        Purpose.LOGIN_CONFIRM: 60 * 15,        # 15 min pour un lien de connexion sur l'application
     }
 
     def is_valid(self):

@@ -124,6 +124,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Après AuthenticationMiddleware (a besoin de request.user) — voir
+    # approvals/middleware.py.
+    'approvals.middleware.TrackLastSeenMiddleware',
 ]
 
 ROOT_URLCONF = 'demand_approb_system_main.urls'

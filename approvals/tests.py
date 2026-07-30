@@ -185,6 +185,38 @@ class WorkflowEngineTests(TestCase):
         request.refresh_from_db()
         self.assertEqual(request.status, Request.Status.DRAFT)
 
+    def test_missing_manager_candidate_true_when_no_manager_and_rule_is_manager_type(self):
+        """Retour client : détecter précisément le cas où proposer un
+        approbateur de secours aiderait (règle "manager" sans repli, et le
+        demandeur n'a pas de manager) — pas les autres causes de blocage."""
+        no_manager_user = User.objects.create_user("orphan_user2", password="x")
+        request_type = RequestType.objects.create(
+            name="Congés sans manager", code="LEAVE_ORPHAN2", form_schema={"fields": []},
+        )
+        ApprovalRule.objects.create(
+            request_type=request_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+        request = Request.objects.create(request_type=request_type, requester=no_manager_user, data={})
+        self.assertTrue(WorkflowEngine(request).missing_manager_candidate())
+
+    def test_missing_manager_candidate_false_when_manager_already_set(self):
+        request = self.make_request(500)  # self.employee a déjà self.manager
+        self.assertFalse(WorkflowEngine(request).missing_manager_candidate())
+
+    def test_missing_manager_candidate_false_when_rule_is_not_manager_type(self):
+        """Un groupe vide ou un utilisateur non configuré ne se règle pas en
+        assignant un manager : la proposition d'approbateur de secours ne
+        doit pas s'afficher pour ce genre de blocage."""
+        no_manager_user = User.objects.create_user("orphan_user3", password="x")
+        request_type = RequestType.objects.create(
+            name="Achat sans groupe", code="PURCHASE_ORPHAN", form_schema={"fields": []},
+        )
+        ApprovalRule.objects.create(
+            request_type=request_type, level=1, criteria={}, approvers_config={"type": "user", "user_id": 999999},
+        )
+        request = Request.objects.create(request_type=request_type, requester=no_manager_user, data={})
+        self.assertFalse(WorkflowEngine(request).missing_manager_candidate())
+
     def test_amount_criteria_uses_custom_amount_field_when_designated(self):
         """Retour client : un type de demande dont le champ montant ne
         s'appelle ni "montant" ni "amount" (ex: "cout" pour Formation) voyait

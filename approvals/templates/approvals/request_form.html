@@ -46,6 +46,30 @@
             </div>
         </div>
 
+        {% if needs_approver_pick %}
+            <div class="card" style="background:var(--surface-alt, #f4f5f7); margin-top:1.25rem; padding:1rem;">
+                <p style="margin-top:0; font-weight:600;">Choisis un approbateur pour continuer</p>
+                <p class="field-help">
+                    Tu n'as pas encore de manager assigné, et personne n'est disponible pour le faire à ta
+                    place pour le moment. La personne que tu choisis ici deviendra ton manager et recevra
+                    tes demandes à approuver — un administrateur pourra corriger ça plus tard si besoin.
+                </p>
+                {% for candidate in approver_candidates %}
+                    <label style="display:block; margin:0.4rem 0;">
+                        <input type="radio" name="chosen_approver_id" value="{{ candidate.id }}" required>
+                        {{ candidate.get_full_name|default:candidate.username }}
+                        {% if candidate.profile.last_seen_at %}
+                            <span class="card-note">— actif aujourd'hui à {{ candidate.profile.last_seen_at|time:"H:i" }}</span>
+                        {% else %}
+                            <span class="card-note">— pas d'activité aujourd'hui</span>
+                        {% endif %}
+                    </label>
+                {% empty %}
+                    <p class="card-note">Aucun approbateur potentiel n'a été trouvé. Contacte le support technique.</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+
         <p style="margin-top:1.25rem; display:flex; gap:0.6rem; flex-wrap:wrap;">
             {% if not editing or is_draft %}
                 <button type="submit" name="action" value="draft" class="btn btn-secondary">Enregistrer comme brouillon</button>

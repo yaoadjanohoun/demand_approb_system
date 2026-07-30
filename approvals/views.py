@@ -1,19 +1,24 @@
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import get_user_model
 from django.core.exceptions import (
     PermissionDenied, RequestDataTooBig, TooManyFieldsSent, TooManyFilesSent, ValidationError,
 )
 from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader
 from django.urls import reverse
+from django.utils import timezone
 
 from . import reports as reports_module
 from .forms import PersonalInfoForm, ProfilePhotoForm, build_dynamic_form, labeled_data
 from .models import Request, RequestAttachment, RequestType, UserProfile
 from .services import RoutingError, WorkflowEngine
+
+User = get_user_model()
 
 LIST_PAGE_SIZE = 15
 
@@ -79,6 +84,90 @@ def profile(request):
     )
 
 
+def _approver_candidates():
+    """Utilisateurs pouvant jouer le rôle d'approbateur de secours (retour
+    client) : ceux qui ont déjà une forme d'autorité d'approbation dans le
+    système — staff (admin fonctionnel), manager d'au moins un profil, ou
+    délégué d'au moins une délégation. Un simple demandeur n'a pas ces
+    droits et n'apparaît jamais dans cette liste.
+
+    Triés par dernière navigation aujourd'hui (le plus récent en premier :
+    "le plus actif"). Si personne n'a navigué aujourd'hui, on retombe sur
+    la liste complète plutôt que de bloquer le demandeur — l'approbateur
+    choisi verra la demande dès sa prochaine connexion, quel que soit le jour."""
+    candidates = list(
+        User.objects.filter(is_active=True)
+        .filter(Q(is_staff=True) | Q(direct_reports__isnull=False) | Q(delegations_received__isnull=False))
+        .distinct()
+        .select_related("profile")
+    )
+    today = timezone.localdate()
+    active_today = [
+        u for u in candidates
+        if getattr(u, "profile", None) and u.profile.last_seen_at and u.profile.last_seen_at.date() == today
+    ]
+    active_today.sort(key=lambda u: u.profile.last_seen_at, reverse=True)
+    return active_today or candidates
+
+
+def _submit_with_manager_fallback(request, engine, resubmit=False):
+    """Tente la soumission ; si elle échoue précisément faute de manager
+    configuré (WorkflowEngine.missing_manager_candidate), propose au
+    demandeur de choisir lui-même un approbateur de secours parmi les
+    utilisateurs actifs aujourd'hui — plutôt qu'un blocage total si personne
+    (admin, directeur, délégué...) n'est disponible pour corriger son profil
+    (retour client). Une fois choisi, il devient son manager permanent :
+    plus besoin de refaire ce choix aux prochaines demandes.
+
+    Retourne (succès: bool, contexte_supplémentaire: dict|None) — le contexte
+    n'est renseigné que lorsqu'il faut afficher le sélecteur d'approbateur."""
+    action = engine.resubmit if resubmit else engine.submit
+    try:
+        action(actor=request.user)
+        return True, None
+    except RoutingError as exc:
+        if not engine.missing_manager_candidate():
+            messages.error(request, str(exc))
+            return False, None
+
+        chosen_id = request.POST.get("chosen_approver_id")
+        if chosen_id:
+            chosen = _validate_chosen_approver(chosen_id)
+            if chosen:
+                profile, _ = UserProfile.objects.get_or_create(user=request.user)
+                profile.manager = chosen
+                profile.save(update_fields=["manager"])
+                try:
+                    action(actor=request.user)
+                    messages.success(
+                        request,
+                        f"{chosen.get_full_name() or chosen.username} a été assigné comme ton manager "
+                        "et recevra désormais tes demandes à approuver.",
+                    )
+                    return True, None
+                except RoutingError as exc2:
+                    messages.error(request, str(exc2))
+                    return False, None
+
+        messages.error(
+            request,
+            "Tu n'as pas encore d'approbateur assigné, et personne n'est disponible pour le "
+            "faire à ta place pour le moment. Choisis-en un ci-dessous pour continuer.",
+        )
+        return False, {"needs_approver_pick": True, "approver_candidates": _approver_candidates()}
+
+
+def _validate_chosen_approver(chosen_id):
+    """Valide que l'ID choisi correspond bien à un candidat légitime — pas
+    n'importe quel utilisateur (ex: un demandeur ne peut pas se choisir
+    lui-même, ou choisir un compte désactivé)."""
+    try:
+        chosen_id = int(chosen_id)
+    except (TypeError, ValueError):
+        return None
+    return next((u for u in _approver_candidates() if u.id == chosen_id), None)
+
+
 #creer une demande de requete
 @login_required
 def request_create(request, type_id):
@@ -126,14 +215,12 @@ def request_create(request, type_id):
                     {"request_type": request_type, "form": form},
                 )
             engine = WorkflowEngine(new_request)
-            try:
-                engine.submit(actor=request.user)
-            except RoutingError as exc:
-                messages.error(request, str(exc))
-                return render(
-                    request, "approvals/request_form.html",
-                    {"request_type": request_type, "form": form},
-                )
+            success, picker_context = _submit_with_manager_fallback(request, engine)
+            if not success:
+                context = {"request_type": request_type, "form": form}
+                if picker_context:
+                    context.update(picker_context)
+                return render(request, "approvals/request_form.html", context)
             _save_attachments(attachments)
             messages.success(request, "Demande soumise avec succès.")
             return redirect("approvals:request_detail", pk=new_request.pk)
@@ -191,14 +278,12 @@ def request_edit(request, pk):
             req.data = _serialize_form_data(form)
             req.save()
             engine = WorkflowEngine(req)
-            try:
-                if is_draft:
-                    engine.submit(actor=request.user)
-                else:
-                    engine.resubmit(actor=request.user)
-            except RoutingError as exc:
-                messages.error(request, str(exc))
-                return render(request, "approvals/request_form.html", {**template_context, "form": form})
+            success, picker_context = _submit_with_manager_fallback(request, engine, resubmit=not is_draft)
+            if not success:
+                context = {**template_context, "form": form}
+                if picker_context:
+                    context.update(picker_context)
+                return render(request, "approvals/request_form.html", context)
             _save_attachments(attachments)
             messages.success(
                 request, "Demande soumise avec succès." if is_draft else "Demande resoumise avec succès."
