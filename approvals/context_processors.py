@@ -1,9 +1,11 @@
 """Données communes à la barre latérale (types de demande actifs, nombre de
 demandes à approuver) — évite de recalculer ça dans chaque vue."""
-from .models import Request, RequestType
+from .models import Request, RequestType, system_role_label
 from .services import WorkflowEngine
 
 
+
+# fonction pour défnir les infos dans le sidebar pour un utilisateur.
 def sidebar(request):
     if not request.user.is_authenticated:
         return {}
@@ -22,15 +24,5 @@ def sidebar(request):
         "nav_request_types": request_types,
         "nav_pending_count": pending_count,
         "nav_photo_url": photo_url,
-        "nav_role_label": _role_label(request.user),
+        "nav_role_label": system_role_label(request.user),
     }
-
-
-def _role_label(user):
-    if user.is_superuser:
-        return "Super admin"
-    if user.is_staff:
-        return "Admin fonctionnel"
-    if user.direct_reports.exists():
-        return "Manager"
-    return "Demandeur"

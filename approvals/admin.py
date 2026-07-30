@@ -13,7 +13,7 @@ from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
 from .models import (
     ApprovalLog, ApprovalRule, Delegation, Department, EmailSettings, Request, RequestAttachment,
-    RequestType, Site, UserProfile,
+    RequestType, Role, Site, UserProfile, system_role_label,
 )
 from .services import RoutingError, WorkflowEngine
 from .validators import validate_entity_name, validate_person_name
@@ -77,6 +77,23 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
     form = ValidatedUserChangeForm
     add_form = ValidatedUserCreationForm
     change_password_form = AdminPasswordChangeForm
+    # Retour client : le rôle (calculé, ET le rôle métier personnalisé) est
+    # affiché côté profil utilisateur mais n'apparaissait nulle part côté
+    # admin — ajoutés à la liste "Utilisateurs" pour rester visibles sans
+    # avoir à ouvrir chaque profil individuellement.
+    list_display = (
+        "username", "email", "first_name", "last_name", "is_staff",
+        "systeme_role_display", "role_display",
+    )
+
+    @display(description="Rôle système")
+    def systeme_role_display(self, obj):
+        return system_role_label(obj)
+
+    @display(description="Rôle")
+    def role_display(self, obj):
+        profile = getattr(obj, "profile", None)
+        return profile.role if profile and profile.role_id else "—"
 
 STATUS_LABELS = {
     "Brouillon": "bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-100",
@@ -130,20 +147,36 @@ class SiteAdmin(ModelAdmin):
     search_fields = ("name",)
 
 
+@admin.register(Role)
+class RoleAdmin(ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
+
+
 #création du profil admin
 @admin.register(UserProfile)
 class UserProfileAdmin(ModelAdmin):
     list_display = (
         "user", "compte_actif_display", "email_confirmee_display", "manager",
-        "department", "department_name", "site", "site_name", "country_code",
+        "department", "department_name", "site", "site_name", "role", "systeme_role_display",
+        "country_code",
     )
-    list_filter = ("department", "site")
-    search_fields = ("user__username", "department__name", "site__name")
+    list_filter = ("department", "site", "role")
+    search_fields = ("user__username", "department__name", "site__name", "role__name")
     autocomplete_fields = ("user", "manager")
-    readonly_fields = ("department_name", "site_name", "last_ad_sync", "email_confirmed_at")
+    readonly_fields = ("department_name", "site_name", "last_ad_sync", "email_confirmed_at", "systeme_role_display")
     actions = ["activer_les_comptes"]
     fieldsets = (
         (None, {"fields": ("user", "manager", "country_code")}),
+        (
+            "Rôle",
+            {
+                "fields": ("role", "systeme_role_display"),
+                "description": "\"Rôle\" est librement défini par un admin fonctionnel (ex: "
+                "\"Comptable\") — purement descriptif. \"Rôle système\" est calculé à partir des "
+                "permissions réelles (lecture seule, non modifiable ici).",
+            },
+        ),
         (
             "Utilisées par le moteur de routage",
             {
@@ -166,6 +199,10 @@ class UserProfileAdmin(ModelAdmin):
     @display(description="Compte actif", boolean=True)
     def compte_actif_display(self, obj):
         return obj.user.is_active
+
+    @display(description="Rôle système")
+    def systeme_role_display(self, obj):
+        return system_role_label(obj.user)
 
     @display(description="Email confirmé", boolean=True)
     def email_confirmee_display(self, obj):

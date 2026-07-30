@@ -54,6 +54,37 @@ class Site(models.Model):
         return self.name
 
 
+class Role(models.Model):
+    """Rôle métier librement défini par un admin fonctionnel (ex: "Comptable",
+    "RH", "Support technique") — purement descriptif, indépendant des
+    permissions réelles de l'utilisateur (retour client : distinct du rôle
+    système calculé automatiquement, voir system_role_label ci-dessous,
+    affiché en lecture seule à côté de celui-ci)."""
+
+    name = models.CharField(max_length=100, unique=True, validators=[validate_entity_name])
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+def system_role_label(user):
+    """Rôle calculé à partir des permissions réelles et de la structure
+    organisationnelle (pas un champ stocké) — utilisé côté client
+    (context_processors.sidebar) et côté admin (UserAdmin/UserProfileAdmin),
+    pour rester la même source de vérité aux deux endroits (retour client :
+    affiché côté profil utilisateur mais absent côté admin)."""
+    if user.is_superuser:
+        return "Super admin"
+    if user.is_staff:
+        return "Admin fonctionnel"
+    if user.direct_reports.exists():
+        return "Manager"
+    return "Demandeur"
+
+
 class UserProfile(models.Model):
     """Données organisationnelles minimales nécessaires au moteur de routage
     (manager, département, site). En production, ces données proviendront
@@ -77,6 +108,12 @@ class UserProfile(models.Model):
         "de département (department_name), pas d'identifiant stable.",
     )
     site = models.ForeignKey(Site, on_delete=models.SET_NULL, null=True, blank=True, related_name="members")
+    role = models.ForeignKey(
+        Role, on_delete=models.SET_NULL, null=True, blank=True, related_name="members",
+        help_text="Rôle métier librement défini (ex: \"Comptable\") — purement descriptif, "
+        "distinct du rôle système affiché juste à côté (Super admin/Admin fonctionnel/"
+        "Manager/Demandeur, calculé à partir des permissions réelles).",
+    )
     country_code = models.CharField(max_length=2, null=True, blank=True)
 
     # Champs informatifs synchronisés depuis Active Directory à la connexion

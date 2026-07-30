@@ -21,6 +21,7 @@ from approvals.models import (
     Department,
     Request,
     RequestType,
+    Role,
     Site,
     UserProfile,
 )
@@ -89,14 +90,23 @@ class Command(BaseCommand):
         dept_marketing, _ = Department.objects.get_or_create(name="Marketing")
         site_paris, _ = Site.objects.get_or_create(name="Paris")
         site_lyon, _ = Site.objects.get_or_create(name="Lyon")
+        role_comptable, _ = Role.objects.get_or_create(name="Comptable")
+        role_charge_compte, _ = Role.objects.get_or_create(name="Chargé de compte")
+        Role.objects.get_or_create(name="Support technique")  # non assigné, juste pour la démo du CRUD
 
         UserProfile.objects.update_or_create(
             user=employee1,
-            defaults={"manager": manager1, "department": dept_ventes, "site": site_paris, "country_code": "FR"},
+            defaults={
+                "manager": manager1, "department": dept_ventes, "site": site_paris,
+                "role": role_charge_compte, "country_code": "FR",
+            },
         )
         UserProfile.objects.update_or_create(
             user=employee2,
-            defaults={"manager": manager1, "department": dept_marketing, "site": site_lyon, "country_code": "FR"},
+            defaults={
+                "manager": manager1, "department": dept_marketing, "site": site_lyon,
+                "role": role_comptable, "country_code": "FR",
+            },
         )
         UserProfile.objects.update_or_create(user=manager1, defaults={"manager": director1, "department": dept_ventes})
 

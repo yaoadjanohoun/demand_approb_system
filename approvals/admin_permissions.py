@@ -46,6 +46,10 @@ def can_view_site(request):
     return request.user.has_perm("approvals.view_site")
 
 
+def can_view_role(request):
+    return request.user.has_perm("approvals.view_role")
+
+
 def can_view_user(request):
     return request.user.has_perm("auth.view_user")
 

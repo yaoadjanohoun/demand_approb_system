@@ -253,6 +253,16 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'  # peuplé par `manage.py collectstatic` 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# Sauvegarde/restauration (voir manage.py backup/restore et "Guide de
+# Sauvegarde et Restauration.md") — retour client : "si l'équipement ou un
+# serveur tombe en panne, on ne pourra rien récupérer". BACKUP_ROOT peut
+# pointer vers un chemin monté depuis un espace hors serveur une fois qu'il
+# existe (partage réseau, disque externe...) ; par défaut, un sous-dossier
+# local (mieux que rien en attendant, mais ne protège pas seul contre une
+# panne matérielle complète du serveur — à copier ailleurs régulièrement).
+BACKUP_ROOT = env('BACKUP_ROOT', default=str(BASE_DIR / 'backups'))
+BACKUP_RETENTION_COUNT = env.int('BACKUP_RETENTION_COUNT', default=14)
+
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
@@ -433,6 +443,12 @@ UNFOLD = {
                         "icon": "location_on",
                         "link": reverse_lazy("admin:approvals_site_changelist"),
                         "permission": "approvals.admin_permissions.can_view_site",
+                    },
+                    {
+                        "title": "Rôles",
+                        "icon": "badge",
+                        "link": reverse_lazy("admin:approvals_role_changelist"),
+                        "permission": "approvals.admin_permissions.can_view_role",
                     },
                     {
                         "title": "Utilisateurs",

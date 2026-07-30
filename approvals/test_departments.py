@@ -8,7 +8,7 @@ from django.urls import reverse
 
 from django.core.exceptions import ValidationError
 
-from .models import Department, UserProfile, Site
+from .models import Department, Role, UserProfile, Site, system_role_label
 from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget
 
 
@@ -43,6 +43,64 @@ class DepartmentSiteModelTests(TestCase):
         par ce validateur, même si l'annuaire renvoie un nom inhabituel."""
         department, _ = Department.objects.get_or_create(name="////////")
         self.assertEqual(department.name, "////////")
+
+
+class RoleTests(TestCase):
+    """Retour client : le supérieur d'un admin fonctionnel a remarqué que le
+    rôle était affiché côté profil utilisateur mais absent côté admin.
+    Ajoute (a) l'affichage du rôle système déjà calculé, et (b) un vrai
+    rôle métier librement gérable (créer/modifier/supprimer/assigner),
+    même principe que Department/Site."""
+
+    def test_str_returns_name(self):
+        role = Role.objects.create(name="Comptable")
+        self.assertEqual(str(role), "Comptable")
+
+    def test_system_role_label_matches_permissions_and_structure(self):
+        superuser = User.objects.create_superuser("root_role", password="x")
+        staff = User.objects.create_user("staff_role", password="x", is_staff=True)
+        manager = User.objects.create_user("manager_role", password="x")
+        employee = User.objects.create_user("employee_role", password="x")
+        UserProfile.objects.create(user=employee, manager=manager)
+
+        self.assertEqual(system_role_label(superuser), "Super admin")
+        self.assertEqual(system_role_label(staff), "Admin fonctionnel")
+        self.assertEqual(system_role_label(manager), "Manager")
+        self.assertEqual(system_role_label(employee), "Demandeur")
+
+    def test_role_is_independent_from_system_role(self):
+        """Un "Demandeur" (aucune permission particulière) peut quand même
+        se voir assigner un rôle métier libre — les deux notions sont
+        indépendantes."""
+        role = Role.objects.create(name="Support technique")
+        employee = User.objects.create_user("employee_role2", password="x")
+        profile = UserProfile.objects.create(user=employee, role=role)
+        self.assertEqual(system_role_label(employee), "Demandeur")
+        self.assertEqual(profile.role.name, "Support technique")
+
+    def test_profile_page_shows_role(self):
+        role = Role.objects.create(name="Comptable")
+        employee = User.objects.create_user("employee_role3", password="x")
+        UserProfile.objects.create(user=employee, role=role)
+        self.client.login(username="employee_role3", password="x")
+        response = self.client.get("/profil/")
+        self.assertContains(response, "Comptable")
+
+    def test_user_admin_list_shows_system_role_and_role(self):
+        role = Role.objects.create(name="Comptable")
+        employee = User.objects.create_user("employee_role4", password="x")
+        UserProfile.objects.create(user=employee, role=role)
+        superuser = User.objects.create_superuser("root_role2", password="x")
+        self.client.force_login(superuser)
+        response = self.client.get("/admin/auth/user/")
+        self.assertContains(response, "Comptable")
+        self.assertContains(response, "Demandeur")
+
+    def test_role_admin_pages_reachable(self):
+        superuser = User.objects.create_superuser("root_role3", password="x")
+        self.client.force_login(superuser)
+        self.assertEqual(self.client.get("/admin/approvals/role/").status_code, 200)
+        self.assertEqual(self.client.get("/admin/approvals/role/add/").status_code, 200)
 
 
 class CriteriaBuilderWidgetTests(TestCase):
