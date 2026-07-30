@@ -43,27 +43,63 @@
     <div class="card-title">Décision</div>
     <label for="comment-text">Commentaire (obligatoire pour refuser ou retourner)</label>
     <textarea id="comment-text" rows="2"></textarea>
+    <p id="comment-required-error" class="field-error" style="display:none; color:#c1362b;">Un commentaire est obligatoire pour refuser ou retourner une demande.</p>
 
     <div class="decision-actions">
-        <form method="post" action="{% url 'approvals:request_approve' req.pk %}" onsubmit="document.getElementById('approve-comment').value = document.getElementById('comment-text').value;">
+        <form method="post" action="{% url 'approvals:request_approve' req.pk %}" id="approve-form">
             {% csrf_token %}
             <input type="hidden" name="comment" id="approve-comment">
             <button type="submit" class="btn btn-approve">Approuver</button>
         </form>
 
-        <form method="post" action="{% url 'approvals:request_return' req.pk %}" onsubmit="document.getElementById('return-comment').value = document.getElementById('comment-text').value; return document.getElementById('comment-text').value.trim() !== '';">
+        <form method="post" action="{% url 'approvals:request_return' req.pk %}" id="return-form"
+              data-confirm="Confirmes-tu le retour de cette demande au demandeur pour information ?">
             {% csrf_token %}
             <input type="hidden" name="comment" id="return-comment">
             <button type="submit" class="btn btn-return">Retourner pour info</button>
         </form>
 
-        <form method="post" action="{% url 'approvals:request_reject' req.pk %}" onsubmit="document.getElementById('reject-comment').value = document.getElementById('comment-text').value; return document.getElementById('comment-text').value.trim() !== '';">
+        <form method="post" action="{% url 'approvals:request_reject' req.pk %}" id="reject-form"
+              data-confirm="Confirmez-vous le refus de cette demande ? Cette action est définitive.">
             {% csrf_token %}
             <input type="hidden" name="comment" id="reject-comment">
             <button type="submit" class="btn btn-reject">Refuser</button>
         </form>
     </div>
 </div>
+<script>
+    // Copie le commentaire partagé dans chaque formulaire avant envoi, et
+    // bloque refuser/retourner sans commentaire — enregistré ici (avant le
+    // script de la modale de confirmation, chargé plus bas dans base.html)
+    // pour s'exécuter en premier : la modale ne doit s'afficher que si le
+    // commentaire est bien renseigné (retour client : trois boutons
+    // Approuver/Retourner/Refuser côte à côte, facile à confondre en clic
+    // rapide — la modale évite un refus accidentel).
+    (function () {
+        var commentBox = document.getElementById('comment-text');
+        var errorBox = document.getElementById('comment-required-error');
+        if (!commentBox) return;
+
+        document.getElementById('approve-form').addEventListener('submit', function () {
+            document.getElementById('approve-comment').value = commentBox.value;
+        });
+
+        ['return', 'reject'].forEach(function (kind) {
+            var form = document.getElementById(kind + '-form');
+            form.addEventListener('submit', function (event) {
+                document.getElementById(kind + '-comment').value = commentBox.value;
+                if (commentBox.value.trim() === '') {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    errorBox.style.display = 'block';
+                    commentBox.focus();
+                } else {
+                    errorBox.style.display = 'none';
+                }
+            });
+        });
+    })();
+</script>
 {% endif %}
 
 {% if not is_requester %}

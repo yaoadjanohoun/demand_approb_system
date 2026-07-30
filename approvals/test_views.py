@@ -19,6 +19,37 @@ from django.utils import timezone
 from .models import ApprovalRule, Request, RequestAttachment, RequestType, UserProfile
 
 
+class DecisionConfirmationTests(TestCase):
+    """Retour client : les boutons Approuver/Retourner/Refuser sont côte à
+    côte, faciles à confondre en clic rapide — Retourner/Refuser doivent
+    demander confirmation (via la modale déjà utilisée ailleurs dans l'app),
+    pas Approuver (action positive, sans risque de "mégarde" à corriger)."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user("manager1", password="x")
+        self.employee = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=self.employee, manager=self.manager)
+        self.request_type = RequestType.objects.create(
+            name="Congés", code="LEAVE", form_schema={"fields": []},
+        )
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+        self.req = Request.objects.create(request_type=self.request_type, requester=self.employee)
+        from .services import WorkflowEngine
+
+        WorkflowEngine(self.req).submit()
+        self.client.login(username="manager1", password="x")
+
+    def test_reject_and_return_forms_ask_for_confirmation_not_approve(self):
+        response = self.client.get(f"/{self.req.pk}/")
+        self.assertContains(response, 'id="reject-form"')
+        self.assertContains(response, "Confirmez-vous le refus")
+        self.assertContains(response, 'id="return-form"')
+        self.assertContains(response, "Confirmes-tu le retour")
+        self.assertNotContains(response, 'id="approve-form" data-confirm')
+
+
 class ApproverCanStillViewAfterActingTests(TestCase):
     def setUp(self):
         self.manager = User.objects.create_user("manager1", password="x")
