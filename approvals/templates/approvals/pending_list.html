@@ -5,12 +5,21 @@
 
 {% if nav_request_types %}
 <div class="filter-pills">
-    <a class="filter-pill{% if not active_type %} active{% endif %}" href="{% url 'approvals:pending_approvals' %}">Toutes</a>
+    <a class="filter-pill{% if not active_type %} active{% endif %}" href="{% url 'approvals:pending_approvals' %}{% if search_query %}?q={{ search_query|urlencode }}{% endif %}">Toutes</a>
     {% for rt in nav_request_types %}
-        <a class="filter-pill{% if active_type == rt.code %} active{% endif %}" href="{% url 'approvals:pending_approvals' %}?type={{ rt.code }}">{{ rt.name }}</a>
+        <a class="filter-pill{% if active_type == rt.code %} active{% endif %}" href="{% url 'approvals:pending_approvals' %}?type={{ rt.code }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">{{ rt.name }}</a>
     {% endfor %}
 </div>
 {% endif %}
+
+<form method="get" style="display:flex; gap:0.5rem; margin-bottom:1rem;">
+    {% if active_type %}<input type="hidden" name="type" value="{{ active_type }}">{% endif %}
+    <input type="search" name="q" value="{{ search_query }}" placeholder="Rechercher (demandeur, motif, montant, fournisseur...)" style="flex:1;">
+    <button type="submit" class="btn btn-secondary">Rechercher</button>
+    {% if search_query %}
+        <a class="btn btn-secondary" href="{% url 'approvals:pending_approvals' %}{% if active_type %}?type={{ active_type }}{% endif %}">Effacer</a>
+    {% endif %}
+</form>
 
 <div class="card">
     {% if requests %}
@@ -28,7 +37,10 @@
         </table>
     {% else %}
         <div class="empty-state">
-            <p>Aucune demande en attente de ton approbation.</p>
+            <p>
+                {% if search_query %}Aucune demande ne correspond à "{{ search_query }}".
+                {% else %}Aucune demande en attente de ton approbation.{% endif %}
+            </p>
         </div>
     {% endif %}
 </div>

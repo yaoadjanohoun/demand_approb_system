@@ -557,6 +557,99 @@ class PaginationTests(TestCase):
         self.assertEqual(len(response.context["requests"]), LIST_PAGE_SIZE)
 
 
+class SearchTests(TestCase):
+    """Retour client : permettre de rechercher rapidement parmi ses demandes
+    ou ses approbations, à la fois par libellé générique et par les champs
+    propres à chaque type de demande (ex: "fournisseur" pour Achat IT,
+    "motif" pour Congés — pas les mêmes informations d'un type à l'autre)."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user("manager1", password="x")
+        self.employee = User.objects.create_user(
+            "employee1", password="x", first_name="Emma", last_name="Employe",
+        )
+        UserProfile.objects.create(user=self.employee, manager=self.manager)
+
+        self.expense_type = RequestType.objects.create(
+            name="Note de frais", code="EXPENSE",
+            form_schema={"fields": [
+                {"name": "montant", "type": "decimal", "label": "Montant"},
+                {"name": "motif", "type": "text", "label": "Motif"},
+            ]},
+        )
+        self.it_type = RequestType.objects.create(
+            name="Achat Fournisseur IT", code="PURCHASE_IT",
+            form_schema={"fields": [
+                {"name": "fournisseur", "type": "text", "label": "Fournisseur"},
+            ]},
+        )
+        ApprovalRule.objects.create(
+            request_type=self.expense_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+        ApprovalRule.objects.create(
+            request_type=self.it_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+
+        self.expense_request = Request.objects.create(
+            request_type=self.expense_type, requester=self.employee,
+            data={"montant": 120, "motif": "Repas d'affaires avec un client"},
+        )
+        self.it_request = Request.objects.create(
+            request_type=self.it_type, requester=self.employee,
+            data={"fournisseur": "Dell Canada"},
+        )
+
+    @staticmethod
+    def _result_codes(response):
+        # "Note de frais"/"Achat Fournisseur IT" apparaissent aussi dans les
+        # liens de la barre latérale, présents sur toute la page quel que
+        # soit le résultat de recherche : on vérifie donc les résultats
+        # réels via le contexte plutôt que le texte brut de la page.
+        return {req.request_type.code for req in response.context["requests"]}
+
+    def test_my_requests_search_matches_field_specific_to_request_type(self):
+        self.client.login(username="employee1", password="x")
+
+        response = self.client.get("/mine/?q=dell")
+        self.assertEqual(self._result_codes(response), {"PURCHASE_IT"})
+
+        response = self.client.get("/mine/?q=repas")
+        self.assertEqual(self._result_codes(response), {"EXPENSE"})
+
+    def test_my_requests_search_is_case_insensitive_and_combines_terms(self):
+        self.client.login(username="employee1", password="x")
+        response = self.client.get("/mine/?q=REPAS client")
+        self.assertContains(response, "Note de frais")
+
+    def test_my_requests_search_with_no_match_shows_empty_state(self):
+        self.client.login(username="employee1", password="x")
+        response = self.client.get("/mine/?q=introuvable")
+        self.assertContains(response, "Aucune demande ne correspond")
+
+    def test_pending_approvals_search_matches_requester_name(self):
+        from .services import WorkflowEngine
+
+        WorkflowEngine(self.expense_request).submit()
+        WorkflowEngine(self.it_request).submit()
+
+        self.client.login(username="manager1", password="x")
+        response = self.client.get("/pending/?q=emma")
+        self.assertEqual(self._result_codes(response), {"EXPENSE", "PURCHASE_IT"})
+
+        response = self.client.get("/pending/?q=dell")
+        self.assertEqual(self._result_codes(response), {"PURCHASE_IT"})
+
+    def test_search_combines_with_type_filter(self):
+        from .services import WorkflowEngine
+
+        WorkflowEngine(self.expense_request).submit()
+
+        self.client.login(username="manager1", password="x")
+        # "emma" matche le demandeur, mais le filtre type=PURCHASE_IT exclut EXPENSE
+        response = self.client.get("/pending/?type=PURCHASE_IT&q=emma")
+        self.assertEqual(self._result_codes(response), set())
+
+
 class NextRequestLinkTests(TestCase):
     """Après une décision, l'approbateur doit pouvoir enchaîner directement sur
     une autre demande du même type sans repasser par la liste (retour client)."""

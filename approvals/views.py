@@ -18,7 +18,8 @@ from .services import RoutingError, WorkflowEngine
 LIST_PAGE_SIZE = 15
 
 
-#dashboard
+#dashboard côté utilisateur
+
 @login_required
 def dashboard(request):
     request_types = RequestType.objects.filter(is_active=True).order_by("name")
@@ -34,7 +35,8 @@ def dashboard(request):
     )
 
 
-#vue du profil
+#vue du profil utilisateur
+
 @login_required
 def profile(request):
     user_profile, _ = UserProfile.objects.get_or_create(user=request.user)
@@ -261,6 +263,32 @@ def _pending_requests_for_user(user):
     return [req for req in candidates if user.id in WorkflowEngine(req).get_effective_approvers()]
 
 
+def _search_haystack(req, include_requester=False):
+    """Texte dans lequel chercher pour une demande : le type, le statut, et
+    chaque champ de son formulaire dynamique — via labeled_data, qui associe
+    déjà chaque valeur à son label configuré par type de demande (retour
+    client : les champs ne sont pas les mêmes d'un type à l'autre, ex:
+    "fournisseur" pour Achat IT, "motif" pour Congés — la recherche doit
+    porter sur ces libellés et valeurs, pas juste un texte générique)."""
+    parts = [req.request_type.name, req.get_status_display()]
+    if include_requester:
+        parts.append(req.requester.get_full_name() or req.requester.username)
+    for row in labeled_data(req.request_type, req.data or {}):
+        parts.append(str(row["label"]))
+        parts.append(str(row["value"]))
+    return " ".join(parts).lower()
+
+
+def _filter_by_search(requests, query, include_requester=False):
+    terms = query.lower().split()
+    if not terms:
+        return requests
+    return [
+        req for req in requests
+        if all(term in _search_haystack(req, include_requester=include_requester) for term in terms)
+    ]
+
+
 @login_required
 def my_requests(request):
     requests = Request.objects.filter(requester=request.user).select_related("request_type")
@@ -269,12 +297,16 @@ def my_requests(request):
     if type_code:
         requests = requests.filter(request_type__code=type_code)
         active_request_type = RequestType.objects.filter(code=type_code).first()
+    search_query = request.GET.get("q", "").strip()
+    if search_query:
+        requests = _filter_by_search(list(requests), search_query)
     page_obj = Paginator(requests, LIST_PAGE_SIZE).get_page(request.GET.get("page"))
     return render(
         request, "approvals/my_requests.html",
         {
             "requests": page_obj, "page_obj": page_obj,
             "active_type": type_code, "active_request_type": active_request_type,
+            "search_query": search_query,
         },
     )
 
@@ -285,10 +317,13 @@ def pending_approvals(request):
     type_code = request.GET.get("type")
     if type_code:
         pending = [req for req in pending if req.request_type.code == type_code]
+    search_query = request.GET.get("q", "").strip()
+    if search_query:
+        pending = _filter_by_search(pending, search_query, include_requester=True)
     page_obj = Paginator(pending, LIST_PAGE_SIZE).get_page(request.GET.get("page"))
     return render(
         request, "approvals/pending_list.html",
-        {"requests": page_obj, "page_obj": page_obj, "active_type": type_code},
+        {"requests": page_obj, "page_obj": page_obj, "active_type": type_code, "search_query": search_query},
     )
 
 
