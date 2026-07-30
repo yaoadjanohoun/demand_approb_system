@@ -650,6 +650,48 @@ class SearchTests(TestCase):
         self.assertEqual(self._result_codes(response), set())
 
 
+class RequestListAllAttributesTests(TestCase):
+    """Retour client : les listes "Mes demandes" et "À approuver" doivent
+    afficher tous les attributs des demandes — les champs du modèle Request
+    (id, dates...) et ceux propres au formulaire de chaque type (via
+    labeled_data), pas seulement le sous-ensemble affiché auparavant."""
+
+    def setUp(self):
+        self.manager = User.objects.create_user("manager1", password="x")
+        self.employee = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=self.employee, manager=self.manager)
+        self.request_type = RequestType.objects.create(
+            name="Note de frais", code="EXPENSE",
+            form_schema={"fields": [{"name": "motif", "type": "text", "label": "Motif"}]},
+        )
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={}, approvers_config={"type": "manager"},
+        )
+        self.req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, data={"motif": "Taxi aéroport"},
+        )
+
+    def test_my_requests_shows_id_dates_and_labeled_fields(self):
+        self.client.login(username="employee1", password="x")
+        response = self.client.get("/mine/")
+        self.assertContains(response, str(self.req.id)[:8])
+        self.assertContains(response, "Créée le")
+        self.assertContains(response, "Complétée le")
+        self.assertContains(response, "Motif")
+        self.assertContains(response, "Taxi aéroport")
+
+    def test_pending_approvals_shows_id_dates_and_labeled_fields(self):
+        from .services import WorkflowEngine
+
+        WorkflowEngine(self.req).submit()
+        self.client.login(username="manager1", password="x")
+        response = self.client.get("/pending/")
+        self.assertContains(response, str(self.req.id)[:8])
+        self.assertContains(response, "Créée le")
+        self.assertContains(response, "Motif")
+        self.assertContains(response, "Taxi aéroport")
+
+
 class NextRequestLinkTests(TestCase):
     """Après une décision, l'approbateur doit pouvoir enchaîner directement sur
     une autre demande du même type sans repasser par la liste (retour client)."""

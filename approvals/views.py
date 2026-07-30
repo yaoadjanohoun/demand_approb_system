@@ -289,6 +289,20 @@ def _filter_by_search(requests, query, include_requester=False):
     ]
 
 
+def _attach_labeled_rows(requests):
+    """Ajoute .labeled_rows (label -> valeur formatée, via labeled_data) à
+    chaque demande — retour client : les listes "Mes demandes"/"À approuver"
+    doivent afficher tous les attributs des demandes, y compris les champs
+    propres au formulaire de chaque type (montant, motif, fournisseur...),
+    différents d'un type à l'autre. Attaché ici plutôt que dans le template
+    pour réutiliser labeled_data (déjà la source de vérité pour le détail
+    d'une demande et pour la recherche) sans exposer sa signature dans les
+    templates."""
+    for req in requests:
+        req.labeled_rows = labeled_data(req.request_type, req.data or {})
+    return requests
+
+
 @login_required
 def my_requests(request):
     requests = Request.objects.filter(requester=request.user).select_related("request_type")
@@ -301,6 +315,7 @@ def my_requests(request):
     if search_query:
         requests = _filter_by_search(list(requests), search_query)
     page_obj = Paginator(requests, LIST_PAGE_SIZE).get_page(request.GET.get("page"))
+    _attach_labeled_rows(page_obj)
     return render(
         request, "approvals/my_requests.html",
         {
@@ -321,6 +336,7 @@ def pending_approvals(request):
     if search_query:
         pending = _filter_by_search(pending, search_query, include_requester=True)
     page_obj = Paginator(pending, LIST_PAGE_SIZE).get_page(request.GET.get("page"))
+    _attach_labeled_rows(page_obj)
     return render(
         request, "approvals/pending_list.html",
         {"requests": page_obj, "page_obj": page_obj, "active_type": type_code, "search_query": search_query},

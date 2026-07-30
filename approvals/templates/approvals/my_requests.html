@@ -28,16 +28,29 @@
     {% endif %}
 </form>
 
-<div class="card">
+<div class="card" style="overflow-x:auto;">
     {% if requests %}
         <table>
-            <tr><th>Type</th><th>Statut</th><th>Niveau</th><th>Soumise le</th><th></th></tr>
+            <tr>
+                <th>ID</th><th>Type</th><th>Statut</th><th>Niveau</th><th>Détails</th>
+                <th>Créée le</th><th>Soumise le</th><th>Complétée le</th><th></th>
+            </tr>
             {% for req in requests %}
                 <tr>
+                    <td><span title="{{ req.id }}">{{ req.id|stringformat:"s"|slice:":8" }}…</span></td>
                     <td>{{ req.request_type.name }}</td>
                     <td><span class="status status-{{ req.status }}">{{ req.get_status_display }}</span></td>
                     <td>{% if req.status != "DRAFT" %}{{ req.current_level }}{% else %}—{% endif %}</td>
+                    <td>
+                        {% for row in req.labeled_rows %}
+                            <div><strong>{{ row.label }} :</strong> {{ row.value }}</div>
+                        {% empty %}
+                            —
+                        {% endfor %}
+                    </td>
+                    <td>{{ req.created_at }}</td>
                     <td>{{ req.submitted_at|default:"—" }}</td>
+                    <td>{{ req.completed_at|default:"—" }}</td>
                     <td style="display:flex; gap:0.5rem;">
                         {% if req.status == "DRAFT" %}
                             <a class="btn btn-secondary btn-sm" href="{% url 'approvals:request_edit' req.pk %}">Continuer</a>
