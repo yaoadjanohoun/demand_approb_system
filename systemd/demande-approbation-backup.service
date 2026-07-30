@@ -1,0 +1,16 @@
+# Sauvegarde quotidienne de la base de données et des fichiers utilisateur
+# (media) — voir "Guide de Sauvegarde et Restauration.md" à la racine du
+# dépôt pour la procédure d'installation complète.
+#
+# Déployé par la DSI, pas par l'application elle-même : les chemins et
+# l'utilisateur ci-dessous sont des exemples à adapter à l'environnement
+# cible (aucun secret n'est écrit ici, ce fichier est versionné).
+
+[Unit]
+Description=Sauvegarde de Demande Approbation (base de données + fichiers utilisateur)
+
+[Service]
+Type=oneshot
+User=mikestuntman
+WorkingDirectory=/home/mikestuntman/dockers/Demande_Approbation
+ExecStart=/home/mikestuntman/dockers/Demande_Approbation/venv/bin/python manage.py backup

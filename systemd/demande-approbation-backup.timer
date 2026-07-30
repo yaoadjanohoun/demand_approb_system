@@ -1,0 +1,16 @@
+# Déclenche demande-approbation-backup.service tous les jours à 3h du matin
+# (heure creuse) — voir "Guide de Sauvegarde et Restauration.md".
+#
+# Persistent=true : si le serveur était éteint/indisponible au moment prévu,
+# la sauvegarde manquée se déclenche au prochain démarrage plutôt que d'être
+# simplement sautée.
+
+[Unit]
+Description=Planification quotidienne de la sauvegarde de Demande Approbation
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

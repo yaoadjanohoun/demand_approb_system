@@ -15,6 +15,7 @@ media/
 staticfiles/
 [Ll]ogs/
 *.log
+/backups/
 
 # Secrets / config locale
 .env
