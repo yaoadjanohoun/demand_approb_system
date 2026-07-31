@@ -491,24 +491,31 @@ class RequestAttachmentTests(TestCase):
 
 
 class SidebarRoleLabelTests(TestCase):
-    """La sidebar affichait 'Utilisateur' pour tout le monde (retour client) :
-    doit maintenant afficher le rôle réel (Manager pour qui a des rapports
-    directs, Demandeur sinon)."""
+    """La sidebar affichait le rôle SYSTÈME calculé (Demandeur/Manager/Admin
+    fonctionnel/Super admin) — retour client : ça doit plutôt être le rôle
+    métier librement assigné (UserProfile.role, ex: "Comptable"), et rester
+    vide tant qu'aucun rôle n'a été assigné, pas de texte de repli."""
 
-    def test_manager_sees_manager_label(self):
-        manager = User.objects.create_user("manager1", password="x")
+    def test_shows_assigned_role_name(self):
+        from .models import Role
+
+        role = Role.objects.create(name="Comptable")
         employee = User.objects.create_user("employee1", password="x")
-        UserProfile.objects.create(user=employee, manager=manager)
-        self.client.login(username="manager1", password="x")
-        response = self.client.get("/")
-        self.assertContains(response, "Manager")
-
-    def test_plain_employee_sees_demandeur_label(self):
-        User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=employee, role=role)
         self.client.login(username="employee1", password="x")
         response = self.client.get("/")
-        self.assertContains(response, "Demandeur")
-        self.assertNotContains(response, "Utilisateur")
+        self.assertContains(response, "Comptable")
+
+    def test_blank_when_no_role_assigned_not_system_role(self):
+        """Ni "Demandeur", ni "Manager", ni aucun autre libellé système ne
+        doit apparaître comme repli — juste vide."""
+        manager = User.objects.create_user("manager1", password="x")
+        employee = User.objects.create_user("employee1", password="x")
+        UserProfile.objects.create(user=employee, manager=manager)  # a des rapports directs, mais pas de Role assigné
+        self.client.login(username="manager1", password="x")
+        response = self.client.get("/")
+        self.assertNotContains(response, "Demandeur")
+        self.assertNotContains(response, "Manager")
 
 
 class LoginErrorStylingTests(TestCase):

@@ -25,7 +25,6 @@
 
     <table>
         <tr><th>Manager</th><td>{{ manager_display }}</td></tr>
-        <tr><th>Rôle</th><td>{{ profile.role.name|default:"—" }}</td></tr>
         <tr><th>Département</th><td>{{ profile.department.name|default:profile.department_name|default:"—" }}</td></tr>
         <tr><th>Site</th><td>{{ profile.site.name|default:profile.site_name|default:"—" }}</td></tr>
     </table>

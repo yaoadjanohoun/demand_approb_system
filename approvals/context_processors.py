@@ -1,6 +1,6 @@
 """Données communes à la barre latérale (types de demande actifs, nombre de
 demandes à approuver) — évite de recalculer ça dans chaque vue."""
-from .models import Request, RequestType, system_role_label
+from .models import Request, RequestType
 from .services import WorkflowEngine
 
 
@@ -20,9 +20,17 @@ def sidebar(request):
     profile = getattr(request.user, "profile", None)
     photo_url = profile.photo.url if profile and profile.photo else None
 
+    # Rôle métier assigné (UserProfile.role, ex: "Comptable") — pas le rôle
+    # système calculé (Super admin/Admin fonctionnel/Manager/Demandeur,
+    # voir models.system_role_label, resté visible côté admin uniquement).
+    # Retour client : laisser vide tant qu'aucun rôle n'est assigné, pour
+    # qu'il s'affiche automatiquement dès qu'un admin fonctionnel le
+    # renseigne — pas de texte de repli à corriger après coup.
+    role_label = profile.role.name if profile and profile.role_id else ""
+
     return {
         "nav_request_types": request_types,
         "nav_pending_count": pending_count,
         "nav_photo_url": photo_url,
-        "nav_role_label": system_role_label(request.user),
+        "nav_role_label": role_label,
     }
