@@ -16,15 +16,54 @@ machine tombe en panne, les sauvegardes tombent avec elle.
 
 **Il faut prévoir un espace de stockage HORS de ce serveur** (partage
 réseau, autre serveur, stockage cloud fourni par la DSI) vers lequel copier
-régulièrement le contenu de `BACKUP_ROOT`. Deux façons de faire une fois cet
-espace disponible :
-- Monter cet espace directement sur le serveur et faire pointer `BACKUP_ROOT`
-  dessus (le plus simple — les sauvegardes s'y écrivent directement).
-- Ou garder `BACKUP_ROOT` local et ajouter une synchronisation régulière
-  (`rsync`, tâche planifiée) vers l'espace externe.
+régulièrement le contenu de `BACKUP_ROOT`. Tant que ce point n'est pas réglé,
+les sauvegardes locales restent un filet de sécurité partiel, pas une vraie
+protection contre un sinistre.
 
-Tant que ce point n'est pas réglé, les sauvegardes locales restent un
-filet de sécurité partiel, pas une vraie protection contre un sinistre.
+Deux approches possibles une fois un espace externe disponible :
+
+**Option A — Monter l'espace externe directement sur le serveur.** Le plus
+simple : `BACKUP_ROOT` pointe directement dessus, les sauvegardes s'y
+écrivent sans étape supplémentaire (pas de copie à gérer, pas de nouveau
+timer). Dépend du type d'espace fourni par la DSI :
+- Partage réseau SMB/CIFS : monter avec `mount -t cifs`, ou une entrée
+  `/etc/fstab` pour que ça survive à un redémarrage.
+- Partage NFS : monter avec `mount -t nfs`.
+
+Une fois monté (ex: sur `/mnt/backup-externe`), changer dans `.env` :
+```
+BACKUP_ROOT=/mnt/backup-externe/demande-approbation
+```
+puis redémarrer l'application (`sudo systemctl restart demande_approbation.service`).
+
+**Option B — Garder `BACKUP_ROOT` local et synchroniser régulièrement.**
+Utile si l'espace externe est accessible par SSH (autre serveur) plutôt que
+monté localement. Ajoute un `rsync` après chaque sauvegarde, via un second
+timer systemd ou directement dans le service de sauvegarde existant.
+
+Gabarit `rsync` vers un serveur distant en SSH (à adapter : utilisateur,
+hôte et chemin distant fournis par la DSI) :
+```bash
+rsync -avz --delete \
+  ~/dockers/Demande_Approbation/backups/ \
+  utilisateur_dsi@serveur-distant:/chemin/vers/espace-externe/
+```
+- `--delete` garde le miroir distant synchronisé avec la rétention locale
+  (les sauvegardes supprimées localement le sont aussi côté distant) — à
+  retirer si on préfère accumuler indéfiniment côté externe.
+- Nécessite une clé SSH sans mot de passe entre le serveur et la
+  destination (`ssh-keygen` + `ssh-copy-id`), pour que la synchronisation
+  puisse tourner sans intervention manuelle.
+
+Pour l'automatiser à la suite de chaque sauvegarde quotidienne, ajouter
+cette ligne `ExecStartPost` dans
+`/etc/systemd/system/demande-approbation-backup.service` (sous la ligne
+`ExecStart=`) :
+```ini
+ExecStartPost=/usr/bin/rsync -avz --delete /home/mikestuntman/dockers/Demande_Approbation/backups/ utilisateur_dsi@serveur-distant:/chemin/vers/espace-externe/
+```
+puis `sudo systemctl daemon-reload` pour prendre en compte le changement.
+Les chemins et identifiants exacts restent à confirmer avec la DSI.
 
 ## Ce qui est sauvegardé
 
@@ -59,28 +98,39 @@ plus récentes sont toujours conservées.
 ## Sauvegarde automatique (planification quotidienne)
 
 Le dossier `systemd/` du dépôt contient les fichiers nécessaires
-(`demande-approbation-backup.service` et `.timer`) — adapter les chemins et
-l'utilisateur aux valeurs réelles du serveur avant de les installer :
+(`demande-approbation-backup.service` et `.timer`), avec des valeurs
+d'exemple (`User`, `WorkingDirectory`, chemin du venv) à adapter au serveur
+réel avant de les installer.
 
+1. Copier les deux fichiers dans systemd :
 ```bash
 sudo cp systemd/demande-approbation-backup.service /etc/systemd/system/
 sudo cp systemd/demande-approbation-backup.timer /etc/systemd/system/
+```
+
+2. Éditer le `.service` pour corriger `User`, `WorkingDirectory` et le
+chemin du Python du venv (`ExecStart`) selon le serveur :
+```bash
+sudo nano /etc/systemd/system/demande-approbation-backup.service
+```
+
+3. Recharger systemd et activer la planification :
+```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now demande-approbation-backup.timer
 ```
 
-Vérifier que la planification est bien active :
-
+4. Vérifier que la planification est bien active :
 ```bash
 systemctl list-timers demande-approbation-backup.timer
 ```
 
-Déclencher une sauvegarde immédiatement, sans attendre l'heure planifiée
-(utile pour vérifier que tout fonctionne après l'installation) :
-
+5. Déclencher une sauvegarde immédiatement, sans attendre l'heure planifiée
+(utile pour vérifier que tout fonctionne juste après l'installation) :
 ```bash
 sudo systemctl start demande-approbation-backup.service
 journalctl -u demande-approbation-backup.service --no-pager -n 20
+ls backups/    # confirmer qu'un nouveau dossier horodaté est apparu
 ```
 
 ## Restauration
