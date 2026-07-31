@@ -72,6 +72,9 @@ class ActiveDirectoryBackend(BaseBackend):
             return None
 
     # ------------------------------------------------------------------
+    
+    
+    
     def _find_user_entry(self, service_conn, username):
         safe_username = ldap3.utils.conv.escape_filter_chars(username)
         search_filter = settings.AUTH_LDAP_USER_SEARCH_FILTER.format(username=safe_username)
