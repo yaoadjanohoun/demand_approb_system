@@ -226,6 +226,7 @@ class UserProfileAdmin(ModelAdmin):
             )
 
 
+# cration du modèle des paramètres mail
 class EmailSettingsForm(forms.ModelForm):
     password = forms.CharField(
         label="Mot de passe / clé d'application",
@@ -425,9 +426,9 @@ class RequestAttachmentInline(admin.TabularInline):
 #creation de modeme des requetes d'admin
 @admin.register(Request)
 class RequestAdmin(JSONWidgetMixin, ModelAdmin):
-    list_display = ("id", "request_type", "requester", "status_display", "current_level", "submitted_at")
+    list_display = ("reference", "request_type", "requester", "status_display", "current_level", "submitted_at")
     list_filter = ("status", "request_type")
-    search_fields = ("id", "requester__username")
+    search_fields = ("reference", "requester__username")
     # Lecture seule : modifier une demande ici contournerait le moteur de routage
     # (pas de recalcul du niveau, pas d'entrée dans ApprovalLog). Les décisions
     # se prennent depuis l'interface de soumission/approbation ou le bouton "Intervenir".
@@ -491,7 +492,7 @@ class DelegationAdmin(ModelAdmin):
         return obj.is_active
 
 
-#cration de modele pour consulter les logs d'approbation admin
+#creation de modele pour consulter les logs d'approbation admin
 @admin.register(ApprovalLog)
 class ApprovalLogAdmin(ModelAdmin):
     list_display = ("timestamp", "request", "actor", "action_type", "previous_status", "new_status")

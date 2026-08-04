@@ -10,6 +10,44 @@ from .models import ApprovalLog, ApprovalRule, Delegation, Department, Request, 
 from .services import RoutingError, WorkflowEngine
 
 
+class RequestReferenceTests(TestCase):
+    """Retour client : dans les listes de demandes (client et admin), rien ne
+    distinguait deux demandes du même type — seul un UUID tronqué et illisible
+    était affiché. `Request.reference` (ex: EXPENSE-000001) doit être
+    séquentiel par type de demande, unique et attribué automatiquement."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee1", password="x")
+        self.expense_type = RequestType.objects.create(
+            name="Dépense", code="EXPENSE", form_schema={"fields": []}
+        )
+        self.leave_type = RequestType.objects.create(
+            name="Congé", code="LEAVE", form_schema={"fields": []}
+        )
+
+    def make_request(self, request_type):
+        return Request.objects.create(request_type=request_type, requester=self.employee, data={})
+
+    def test_reference_is_sequential_per_type(self):
+        first = self.make_request(self.expense_type)
+        second = self.make_request(self.expense_type)
+        self.assertEqual(first.reference, "EXPENSE-000001")
+        self.assertEqual(second.reference, "EXPENSE-000002")
+
+    def test_reference_sequence_is_independent_per_type(self):
+        self.make_request(self.expense_type)
+        first_leave = self.make_request(self.leave_type)
+        self.assertEqual(first_leave.reference, "LEAVE-000001")
+
+    def test_reference_does_not_change_on_update(self):
+        request = self.make_request(self.expense_type)
+        original_reference = request.reference
+        request.status = Request.Status.PENDING
+        request.save()
+        request.refresh_from_db()
+        self.assertEqual(request.reference, original_reference)
+
+
 class WorkflowEngineTests(TestCase):
     def setUp(self):
         self.manager = User.objects.create_user("manager1", password="x")

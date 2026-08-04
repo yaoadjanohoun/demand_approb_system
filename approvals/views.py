@@ -355,7 +355,7 @@ def _search_haystack(req, include_requester=False):
     client : les champs ne sont pas les mêmes d'un type à l'autre, ex:
     "fournisseur" pour Achat IT, "motif" pour Congés — la recherche doit
     porter sur ces libellés et valeurs, pas juste un texte générique)."""
-    parts = [req.request_type.name, req.get_status_display()]
+    parts = [req.reference, req.request_type.name, req.get_status_display()]
     if include_requester:
         parts.append(req.requester.get_full_name() or req.requester.username)
     for row in labeled_data(req.request_type, req.data or {}):

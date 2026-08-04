@@ -172,6 +172,12 @@ class RequestType(models.Model):
         help_text="Marque les demandes de ce type comme sensibles (ex: congé médical).",
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    last_reference_number = models.PositiveIntegerField(
+        default=0,
+        editable=False,
+        help_text="Compteur interne utilisé pour générer la référence (ex: EXPENSE-000001) "
+        "de chaque nouvelle demande de ce type — ne pas modifier manuellement.",
+    )
 
     def __str__(self):
         return self.name
@@ -257,6 +263,15 @@ class Request(models.Model):
         RETURNED = "RETURNED", "Retournée"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reference = models.CharField(
+        max_length=30,
+        unique=True,
+        editable=False,
+        blank=True,
+        help_text="Code séquentiel lisible (ex: EXPENSE-000042), attribué automatiquement "
+        "à la création — sert à distinguer deux demandes du même type dans les listes, "
+        "l'UUID n'étant pas lisible.",
+    )
     request_type = models.ForeignKey(
         RequestType, on_delete=models.PROTECT, related_name="requests"
     )
@@ -294,8 +309,24 @@ class Request(models.Model):
                 {"data": f"Champs inconnus pour ce type de demande : {', '.join(sorted(unknown))}"}
             )
 
+    def save(self, *args, **kwargs):
+        if self._state.adding and not self.reference:
+            self.reference = self._next_reference()
+        super().save(*args, **kwargs)
+
+    def _next_reference(self):
+        """Génère EXPENSE-000042, etc. L'UPDATE ... SET = F() + 1 est une seule
+        instruction SQL atomique : sous SQLite les écritures sont sérialisées au
+        niveau du fichier, donc deux demandes créées en même temps ne peuvent
+        pas recevoir le même numéro, même sans verrou explicite en Python."""
+        RequestType.objects.filter(pk=self.request_type_id).update(
+            last_reference_number=models.F("last_reference_number") + 1
+        )
+        self.request_type.refresh_from_db(fields=["last_reference_number"])
+        return f"{self.request_type.code}-{self.request_type.last_reference_number:06d}"
+
     def __str__(self):
-        return f"{self.request_type.code} #{self.id} ({self.status})"
+        return f"{self.reference or self.id} ({self.status})"
 
 
 ATTACHMENT_MAX_SIZE_MB = 5

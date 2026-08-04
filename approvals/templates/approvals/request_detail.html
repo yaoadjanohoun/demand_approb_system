@@ -4,7 +4,7 @@
 <div class="page-head">
     <div>
         <a class="back-link" href="{{ back_url }}">← {{ back_label }}</a>
-        <h1>{{ req.request_type.name }}</h1>
+        <h1>{{ req.request_type.name }} <span class="card-note">{{ req.reference }}</span></h1>
         <div class="meta-row">
             <span>Statut : <span class="status status-{{ req.status }}">{{ req.get_status_display }}</span></span>
             <span>Niveau : <strong>{{ req.current_level }}</strong></span>

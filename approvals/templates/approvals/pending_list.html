@@ -25,12 +25,12 @@
     {% if requests %}
         <table>
             <tr>
-                <th>ID</th><th>Type</th><th>Demandeur</th><th>Statut</th><th>Niveau</th><th>Détails</th>
+                <th>Référence</th><th>Type</th><th>Demandeur</th><th>Statut</th><th>Niveau</th><th>Détails</th>
                 <th>Créée le</th><th>Soumise le</th><th>Complétée le</th><th></th>
             </tr>
             {% for req in requests %}
                 <tr>
-                    <td><span title="{{ req.id }}">{{ req.id|stringformat:"s"|slice:":8" }}…</span></td>
+                    <td>{{ req.reference }}</td>
                     <td>{{ req.request_type.name }}</td>
                     <td>{{ req.requester.username }}</td>
                     <td><span class="status status-{{ req.status }}">{{ req.get_status_display }}</span></td>
