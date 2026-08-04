@@ -15,6 +15,32 @@ from .forms import labeled_data
 # droite de la page et plante ("Not enough horizontal space").
 _NEXT_LINE = {"new_x": XPos.LMARGIN, "new_y": YPos.NEXT}
 
+# La police de base (Helvetica) ne supporte que Latin-1 — les accents français
+# passent, mais pas les caractères typographiques "intelligents" (tiret
+# cadratin utilisé par labeled_data() pour une valeur vide, guillemets
+# courbes, points de suspension...) qu'un utilisateur peut aussi taper
+# librement dans un champ texte. Remplacés par leur équivalent ASCII ; tout
+# ce qui reste hors Latin-1 est neutralisé plutôt que de faire planter la
+# génération du PDF.
+_TYPOGRAPHIC_REPLACEMENTS = {
+    "—": "-",  # tiret cadratin —
+    "–": "-",  # tiret demi-cadratin –
+    "‘": "'", "’": "'",  # guillemets simples courbes
+    "“": '"', "”": '"',  # guillemets doubles courbes
+    "…": "...",  # points de suspension …
+    " ": " ",  # espace insécable
+}
+
+
+def _pdf_safe(text):
+    for original, replacement in _TYPOGRAPHIC_REPLACEMENTS.items():
+        text = text.replace(original, replacement)
+    return text.encode("latin-1", errors="replace").decode("latin-1")
+
+
+def _write_line(pdf, text, height=6):
+    pdf.multi_cell(0, height, _pdf_safe(text), **_NEXT_LINE)
+
 
 def generate_request_summary_pdf(req):
     pdf = FPDF()
@@ -22,7 +48,7 @@ def generate_request_summary_pdf(req):
     pdf.add_page()
 
     pdf.set_font("Helvetica", "B", 16)
-    pdf.multi_cell(0, 10, req.request_type.name, **_NEXT_LINE)
+    _write_line(pdf, req.request_type.name, height=10)
 
     pdf.set_font("Helvetica", "", 11)
     meta_lines = [
@@ -32,18 +58,18 @@ def generate_request_summary_pdf(req):
         f"Soumise le : {req.submitted_at.strftime('%d/%m/%Y %H:%M') if req.submitted_at else '-'}",
     ]
     for line in meta_lines:
-        pdf.multi_cell(0, 6, line, **_NEXT_LINE)
+        _write_line(pdf, line)
     pdf.ln(4)
 
     pdf.set_font("Helvetica", "B", 13)
-    pdf.multi_cell(0, 8, "Details de la demande", **_NEXT_LINE)
+    _write_line(pdf, "Details de la demande", height=8)
     pdf.ln(1)
 
     for row in labeled_data(req.request_type, req.data or {}):
         pdf.set_font("Helvetica", "B", 10)
-        pdf.multi_cell(0, 6, str(row["label"]), **_NEXT_LINE)
+        _write_line(pdf, str(row["label"]))
         pdf.set_font("Helvetica", "", 11)
-        pdf.multi_cell(0, 6, str(row["value"]) if row["value"] not in (None, "") else "-", **_NEXT_LINE)
+        _write_line(pdf, str(row["value"]) if row["value"] not in (None, "") else "-")
         pdf.ln(2)
 
     return bytes(pdf.output())

@@ -1036,7 +1036,31 @@ class RequestSummaryPdfDownloadTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "application/pdf")
         self.assertTrue(response.content.startswith(b"%PDF"))
-        self.assertIn(self.req.reference.encode(), response.content)
+
+    def test_pdf_generation_does_not_crash_on_empty_field(self):
+        """labeled_data() affiche un tiret cadratin (—, hors Latin-1) pour une
+        valeur vide — la police de base du PDF (Helvetica) ne le supporte pas,
+        ça faisait planter la génération (UnicodeEncodeError) plutôt que de
+        l'afficher comme un simple "-"."""
+        self.request_type.form_schema = {
+            "fields": [
+                {"name": "departement", "type": "text", "label": "Département", "required": True},
+                {"name": "commentaire", "type": "text", "label": "Commentaire", "required": False},
+            ]
+        }
+        self.request_type.save()
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, data={"departement": "Ventes"}
+        )
+        from .services import WorkflowEngine
+
+        WorkflowEngine(req).submit(actor=self.employee)
+
+        self.client.login(username="employee_dl", password="x")
+        response = self.client.get(f"/{req.pk}/pdf/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertIn(req.reference.encode(), response.content)
         self.assertIn(b"Ventes", response.content)
 
     def test_approver_can_download_pdf(self):
