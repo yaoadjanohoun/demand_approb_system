@@ -215,6 +215,67 @@ class FormSchemaBuilderWidget(forms.Textarea):
 """)
 
 
+RICH_TEXT_COMMANDS = [
+    ("bold", "B"),
+    ("italic", "I"),
+    ("underline", "U"),
+    ("justifyLeft", "⇤"),
+    ("justifyCenter", "≡"),
+    ("justifyRight", "⇥"),
+]
+
+
+class RichTextWidget(forms.Textarea):
+    """Éditeur simple (gras/italique/souligné/alignement) pour un texte
+    affiché tel quel dans un PDF (voir DocumentBranding.header_text/footer_text
+    et approvals/pdf_export.py, qui rend ce HTML via FPDF.write_html) — retour
+    client : un simple champ texte brut ne permettait pas de mettre en forme
+    l'en-tête/pied de page comme sur les formulaires papier existants."""
+
+    def render(self, name, value, attrs=None, renderer=None):
+        textarea_html = super().render(name, value, attrs, renderer)
+        widget_id = (attrs or {}).get("id", f"id_{name}")
+
+        return mark_safe(f"""
+<div class="rtw-builder" data-textarea-id="{widget_id}" style="max-width: 640px;">
+  <div class="rtw-toolbar" style="margin-bottom:4px; display:flex; gap:4px;">
+    {"".join(
+        f'<button type="button" class="rtw-cmd" data-cmd="{cmd}" '
+        f'style="width:28px; height:28px; cursor:pointer;">{label}</button>'
+        for cmd, label in RICH_TEXT_COMMANDS
+    )}
+  </div>
+  <div class="rtw-editor" contenteditable="true"
+       style="min-height:80px; padding:8px; border:1px solid #d1d5db; border-radius:4px;"></div>
+  <div style="display:none;">{textarea_html}</div>
+</div>
+<script>
+(function() {{
+  const container = document.currentScript.previousElementSibling;
+  const textarea = document.getElementById("{widget_id}");
+  const editor = container.querySelector(".rtw-editor");
+  editor.innerHTML = textarea.value || "";
+
+  container.querySelectorAll(".rtw-cmd").forEach(function(btn) {{
+    btn.addEventListener("mousedown", function(event) {{
+      event.preventDefault();  // garde le focus (et la sélection) dans l'éditeur
+      document.execCommand(btn.dataset.cmd, false, null);
+    }});
+  }});
+
+  function sync() {{
+    textarea.value = editor.innerHTML;
+  }}
+
+  const form = container.closest("form");
+  if (form) {{
+    form.addEventListener("submit", sync);
+  }}
+}})();
+</script>
+""")
+
+
 class CriteriaBuilderWidget(forms.Textarea):
     """Constructeur visuel pour ApprovalRule.criteria : liste de conditions
     (type, valeur) au lieu de JSON brut. Vide = règle par défaut (sans condition).

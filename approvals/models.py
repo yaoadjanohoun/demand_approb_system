@@ -25,6 +25,8 @@ def _generate_token():
 PROFILE_PHOTO_MAX_SIZE_MB = 2
 
 
+#fonction pour réguler la limite d'upload de l'image de la photo de profil
+
 def validate_profile_photo_size(file):
     if file.size > PROFILE_PHOTO_MAX_SIZE_MB * 1024 * 1024:
         raise ValidationError(f"La photo ne doit pas dépasser {PROFILE_PHOTO_MAX_SIZE_MB} Mo.")
@@ -208,11 +210,13 @@ class DocumentBranding(models.Model):
     header_text = models.TextField(
         blank=True,
         help_text="Affiché en haut du PDF, sous les logos (ex: adresse de l'entreprise, "
-        "numéro de document, date de révision).",
+        "numéro de document, date de révision) — mise en forme simple possible "
+        "(gras/italique/souligné/alignement).",
     )
     footer_text = models.TextField(
         blank=True,
-        help_text="Affiché en bas de chaque page du PDF (ex: mentions légales).",
+        help_text="Affiché en bas de chaque page du PDF (ex: mentions légales) — mise en "
+        "forme simple possible (gras/italique/souligné/alignement).",
     )
 
     class Meta:

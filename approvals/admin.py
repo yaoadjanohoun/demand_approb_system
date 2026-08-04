@@ -17,7 +17,9 @@ from .models import (
 )
 from .services import RoutingError, WorkflowEngine
 from .validators import validate_entity_name, validate_person_name
-from .widgets import ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSchemaBuilderWidget
+from .widgets import (
+    ApproversConfigBuilderWidget, CriteriaBuilderWidget, FormSchemaBuilderWidget, RichTextWidget,
+)
 
 
 admin.site.site_header = "Système de Demandes et d'Approbation — Administration"
@@ -357,7 +359,8 @@ class BrandingLogoInline(admin.TabularInline):
 
 
 @admin.register(DocumentBranding)
-class DocumentBrandingAdmin(ModelAdmin):
+class DocumentBrandingAdmin(NamedFieldWidgetMixin, ModelAdmin):
+    field_widgets = {"header_text": RichTextWidget, "footer_text": RichTextWidget}
     list_display = ("request_type",)
     inlines = [BrandingLogoInline]
     fieldsets = (

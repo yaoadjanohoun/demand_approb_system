@@ -74,8 +74,7 @@ class _BrandedPDF(FPDF):
             self.set_y(self.t_margin + _LOGO_HEIGHT_MM + 2)
         if self._branding.header_text:
             self.set_font("Helvetica", "", 9)
-            for line in self._branding.header_text.splitlines():
-                _write_line(self, line, height=4)
+            self._write_html_no_page_break(_pdf_safe(self._branding.header_text))
         self.ln(2)
 
     def footer(self):
@@ -83,8 +82,19 @@ class _BrandedPDF(FPDF):
             return
         self.set_y(-18)
         self.set_font("Helvetica", "", 8)
-        for line in self._branding.footer_text.splitlines():
-            _write_line(self, line, height=4)
+        self._write_html_no_page_break(_pdf_safe(self._branding.footer_text))
+
+    def _write_html_no_page_break(self, html):
+        """write_html() déclenche le saut de page automatique dès que la
+        position d'écriture tombe dans la marge de bas de page — exactement
+        où se trouve le pied de page (placé volontairement à 18mm du bas,
+        marge de saut à 25mm) : le texte partait sur une page fantôme au lieu
+        de s'afficher. Un en-tête/pied de page ne doit jamais créer de
+        nouvelle page, donc désactivé le temps de cet appel."""
+        auto, margin = self.auto_page_break, self.b_margin
+        self.set_auto_page_break(False)
+        self.write_html(html)
+        self.set_auto_page_break(auto, margin)
 
 
 def generate_request_summary_pdf(req):
