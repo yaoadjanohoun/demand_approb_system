@@ -6,6 +6,7 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path, re_path
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.static import serve as serve_static
 
 from approvals import auth_views as approvals_auth_views
@@ -47,5 +48,13 @@ urlpatterns = [
     # Fichiers utilisateur (photos de profil, etc.) : servis directement par Django,
     # comme WHITENOISE_USE_FINDERS le fait déjà pour les statiques, pour rester
     # fonctionnel même sans configuration IIS dédiée à /media/.
-    re_path(r'^media/(?P<path>.*)$', serve_static, {'document_root': settings.MEDIA_ROOT}),
+    # xframe_options_sameorigin : le X-Frame-Options global du site est DENY
+    # (clickjacking), ce qui bloquait aussi l'affichage des PDF de référence
+    # dans l'iframe de la page de demande, pourtant même origine — exception
+    # limitée à cette seule route, le reste du site garde DENY.
+    re_path(
+        r'^media/(?P<path>.*)$',
+        xframe_options_sameorigin(serve_static),
+        {'document_root': settings.MEDIA_ROOT},
+    ),
 ]
