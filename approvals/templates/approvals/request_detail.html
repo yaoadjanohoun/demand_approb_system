@@ -12,6 +12,9 @@
             <span>Soumise le : <strong>{{ req.submitted_at|default:"—" }}</strong></span>
         </div>
     </div>
+    {% if req.status != "DRAFT" %}
+        <a class="btn btn-secondary" href="{% url 'approvals:request_download_pdf' req.pk %}">Télécharger le PDF</a>
+    {% endif %}
 </div>
 
 <div style="display:flex; gap:1.25rem; align-items:flex-start; flex-wrap:wrap;">

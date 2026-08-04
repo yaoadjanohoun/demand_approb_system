@@ -16,6 +16,7 @@ urlpatterns = [
     path("rapports/export/", views.reports_export, name="reports_export"),
     path("new/<int:type_id>/", views.request_create, name="request_create"),
     path("<uuid:pk>/", views.request_detail, name="request_detail"),
+    path("<uuid:pk>/pdf/", views.request_download_pdf, name="request_download_pdf"),
     path("<uuid:pk>/edit/", views.request_edit, name="request_edit"),
     path("<uuid:pk>/delete/", views.request_delete, name="request_delete"),
     path("<uuid:pk>/approve/", views.request_approve, name="request_approve"),

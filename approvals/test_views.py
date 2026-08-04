@@ -999,3 +999,63 @@ class ReferenceFormPdfTests(TestCase):
         response = self.client.get(f"/{req.pk}/")
         self.assertContains(response, "Document de référence")
         self.assertContains(response, self.request_type.reference_form_pdf.url)
+
+
+class RequestSummaryPdfDownloadTests(TestCase):
+    """Retour client : en plus du PDF de référence (lecture seule), un PDF
+    résumé des réponses saisies doit être téléchargeable — généré à la volée,
+    pas une copie remplie du PDF de référence (voir approvals/pdf_export.py)."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee_dl", password="x")
+        self.manager = User.objects.create_user("manager_dl", password="x")
+        self.stranger = User.objects.create_user("stranger_dl", password="x")
+        UserProfile.objects.create(user=self.employee, manager=self.manager)
+        self.request_type = RequestType.objects.create(
+            name="Nouveau rapport",
+            code="REPORT",
+            form_schema={"fields": [{"name": "departement", "type": "text", "label": "Département", "required": True}]},
+        )
+        from .models import ApprovalRule
+
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={}, approvers_config={"type": "manager"}
+        )
+        self.req = Request.objects.create(
+            request_type=self.request_type,
+            requester=self.employee,
+            data={"departement": "Ventes"},
+        )
+        from .services import WorkflowEngine
+
+        WorkflowEngine(self.req).submit(actor=self.employee)
+
+    def test_requester_can_download_pdf_with_answers(self):
+        self.client.login(username="employee_dl", password="x")
+        response = self.client.get(f"/{self.req.pk}/pdf/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/pdf")
+        self.assertTrue(response.content.startswith(b"%PDF"))
+        self.assertIn(self.req.reference.encode(), response.content)
+        self.assertIn(b"Ventes", response.content)
+
+    def test_approver_can_download_pdf(self):
+        self.client.login(username="manager_dl", password="x")
+        response = self.client.get(f"/{self.req.pk}/pdf/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_unrelated_user_cannot_download_pdf(self):
+        self.client.login(username="stranger_dl", password="x")
+        response = self.client.get(f"/{self.req.pk}/pdf/")
+        self.assertEqual(response.status_code, 403)
+
+    def test_download_link_shown_on_submitted_request_not_on_draft(self):
+        self.client.login(username="employee_dl", password="x")
+        response = self.client.get(f"/{self.req.pk}/")
+        self.assertContains(response, "Télécharger le PDF")
+
+        draft = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, status=Request.Status.DRAFT, data={}
+        )
+        response = self.client.get(f"/{draft.pk}/")
+        self.assertNotContains(response, "Télécharger le PDF")

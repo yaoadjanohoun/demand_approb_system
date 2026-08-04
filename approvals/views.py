@@ -7,7 +7,7 @@ from django.core.exceptions import (
 )
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader
 from django.urls import reverse
@@ -16,6 +16,7 @@ from django.utils import timezone
 from . import reports as reports_module
 from .forms import PersonalInfoForm, ProfilePhotoForm, build_dynamic_form, labeled_data
 from .models import Request, RequestAttachment, RequestType, UserProfile
+from .pdf_export import generate_request_summary_pdf
 from .services import RoutingError, WorkflowEngine
 
 User = get_user_model()
@@ -471,6 +472,22 @@ def request_detail(request, pk):
             "back_label": back_label,
         },
     )
+
+
+@login_required
+def request_download_pdf(request, pk):
+    """PDF résumé téléchargeable des réponses saisies (retour client) — en
+    plus du document de référence (RequestType.reference_form_pdf), généré
+    à la volée à partir des mêmes données que la page de détail, pas une
+    copie remplie du PDF de référence."""
+    req = get_object_or_404(Request, pk=pk)
+    if not (_can_view(request.user, req) or request.user.is_staff):
+        raise PermissionDenied
+
+    pdf_bytes = generate_request_summary_pdf(req)
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{req.reference}.pdf"'
+    return response
 
 
 @login_required
