@@ -116,7 +116,11 @@
 
     document.querySelectorAll(".dte-add-field").forEach(function(btn) {
         btn.addEventListener("click", function() {
-            addTextbox("{{" + btn.dataset.field + "}}", { field: btn.dataset.field });
+            // "{" + "{" plutôt que "{{" : un "{{" littéral ici serait intercepté par
+            // le moteur de templates Django (ce fichier est un template, pas du JS pur)
+            // et remplacé par du contenu incorrect, cassant le reste du script.
+            var placeholder = "{" + "{" + btn.dataset.field + "}" + "}";
+            addTextbox(placeholder, { field: btn.dataset.field });
         });
     });
 

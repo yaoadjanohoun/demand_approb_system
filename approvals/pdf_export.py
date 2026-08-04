@@ -148,6 +148,8 @@ def _set_template_font(pdf, family, style, size_pt, registered_fonts):
     return family in _BUILTIN_FONT_FAMILIES
 
 
+#fonction de génération du template
+
 def _generate_from_template(req, template):
     pdf = FPDF(format="A4")
     pdf.set_compression(False)
