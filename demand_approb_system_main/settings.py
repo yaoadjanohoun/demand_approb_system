@@ -391,6 +391,12 @@ UNFOLD = {
                         "permission": "approvals.admin_permissions.can_view_approvalrule",
                     },
                     {
+                        "title": "Habillage de document",
+                        "icon": "palette",
+                        "link": reverse_lazy("admin:approvals_documentbranding_changelist"),
+                        "permission": "approvals.admin_permissions.can_view_documentbranding",
+                    },
+                    {
                         "title": "Délégations",
                         "icon": "swap_horiz",
                         "link": reverse_lazy("admin:approvals_delegation_changelist"),

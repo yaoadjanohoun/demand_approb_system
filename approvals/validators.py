@@ -22,6 +22,11 @@ FORM_SCHEMA = {  # Schéma A — RequestType.form_schema
                     },
                     "label": {"type": "string"},
                     "required": {"type": "boolean"},
+                    "section": {
+                        "type": "string",
+                        "description": "Regroupe ce champ sous un sous-titre dans le formulaire et le "
+                        "PDF (ex: 'Informations sur le demandeur') — vide = pas de regroupement.",
+                    },
                 },
             },
         },

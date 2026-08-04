@@ -12,8 +12,8 @@ from unfold.forms import AdminPasswordChangeForm, BaseDialogForm, UserChangeForm
 from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
 from .models import (
-    ApprovalLog, ApprovalRule, Delegation, Department, EmailSettings, Request, RequestAttachment,
-    RequestType, Role, Site, UserProfile, system_role_label,
+    ApprovalLog, ApprovalRule, BrandingLogo, Delegation, Department, DocumentBranding, EmailSettings,
+    Request, RequestAttachment, RequestType, Role, Site, UserProfile, system_role_label,
 )
 from .services import RoutingError, WorkflowEngine
 from .validators import validate_entity_name, validate_person_name
@@ -348,6 +348,32 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
                 obj.created_by = request.user
             obj.save()
         formset.save_m2m()
+
+
+class BrandingLogoInline(admin.TabularInline):
+    model = BrandingLogo
+    extra = 1
+    fields = ("image", "order")
+
+
+@admin.register(DocumentBranding)
+class DocumentBrandingAdmin(ModelAdmin):
+    list_display = ("request_type",)
+    inlines = [BrandingLogoInline]
+    fieldsets = (
+        ("Type de demande", {"fields": ("request_type",)}),
+        (
+            "En-tête / pied de page",
+            {
+                "fields": ("header_text", "footer_text"),
+                "description": (
+                    "Affichés sur le PDF résumé de chaque demande de ce type "
+                    "(voir bouton \"Télécharger le PDF\" sur une demande) — les logos "
+                    "s'ajoutent séparément ci-dessous."
+                ),
+            },
+        ),
+    )
 
 
 # creation de modèle des règles d'approbation d'un compte admin

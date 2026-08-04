@@ -2,12 +2,17 @@
 de référence attaché au type de demande — voir RequestType.reference_form_pdf
 — l'approbateur doit pouvoir télécharger un PDF reprenant les réponses
 saisies par le demandeur). Ce PDF est généré à la volée à partir des mêmes
-données que la page de détail (labeled_data), pas une copie du PDF de
-référence : aucun champ de formulaire PDF (AcroForm) n'est rempli."""
+données que la page de détail (grouped_labeled_data), pas une copie du PDF
+de référence : aucun champ de formulaire PDF (AcroForm) n'est rempli.
+
+L'habillage (logos, en-tête, pied de page — voir DocumentBranding) est
+propre à chaque type de demande et s'affiche automatiquement sur chaque
+page, via header()/footer() (FPDF les rappelle à chaque saut de page)."""
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
-from .forms import labeled_data
+from .forms import grouped_labeled_data
+from .models import DocumentBranding
 
 # new_x=LMARGIN, new_y=NEXT : fpdf2 ne ramène plus le curseur à la marge de
 # gauche après un multi_cell par défaut (il reste à droite du texte écrit) —
@@ -28,8 +33,11 @@ _TYPOGRAPHIC_REPLACEMENTS = {
     "‘": "'", "’": "'",  # guillemets simples courbes
     "“": '"', "”": '"',  # guillemets doubles courbes
     "…": "...",  # points de suspension …
-    " ": " ",  # espace insécable
+    " ": " ",  # espace insécable
 }
+
+_LOGO_HEIGHT_MM = 14
+_LOGO_GAP_MM = 6
 
 
 def _pdf_safe(text):
@@ -42,9 +50,49 @@ def _write_line(pdf, text, height=6):
     pdf.multi_cell(0, height, _pdf_safe(text), **_NEXT_LINE)
 
 
+class _BrandedPDF(FPDF):
+    """FPDF rappelle header()/footer() à chaque add_page() — c'est ce qui
+    permet à l'habillage de se répéter automatiquement sur chaque page,
+    sans que generate_request_summary_pdf() ait à y penser."""
+
+    def __init__(self, branding):
+        super().__init__()
+        self._branding = branding
+
+    def header(self):
+        if not self._branding:
+            return
+        logos = list(self._branding.logos.all())
+        if logos:
+            x = self.l_margin
+            for logo in logos:
+                try:
+                    self.image(logo.image.path, x=x, y=self.t_margin, h=_LOGO_HEIGHT_MM)
+                except (FileNotFoundError, RuntimeError):
+                    continue  # logo supprimé du disque ou illisible : on n'interrompt pas la génération
+                x += _LOGO_HEIGHT_MM + _LOGO_GAP_MM
+            self.set_y(self.t_margin + _LOGO_HEIGHT_MM + 2)
+        if self._branding.header_text:
+            self.set_font("Helvetica", "", 9)
+            for line in self._branding.header_text.splitlines():
+                _write_line(self, line, height=4)
+        self.ln(2)
+
+    def footer(self):
+        if not self._branding or not self._branding.footer_text:
+            return
+        self.set_y(-18)
+        self.set_font("Helvetica", "", 8)
+        for line in self._branding.footer_text.splitlines():
+            _write_line(self, line, height=4)
+
+
 def generate_request_summary_pdf(req):
-    pdf = FPDF()
+    branding = DocumentBranding.objects.filter(request_type=req.request_type).prefetch_related("logos").first()
+
+    pdf = _BrandedPDF(branding)
     pdf.set_compression(False)  # PDF lisible en clair (pratique pour les tests, coût négligeable ici)
+    pdf.set_auto_page_break(auto=True, margin=25)
     pdf.add_page()
 
     pdf.set_font("Helvetica", "B", 16)
@@ -61,15 +109,17 @@ def generate_request_summary_pdf(req):
         _write_line(pdf, line)
     pdf.ln(4)
 
-    pdf.set_font("Helvetica", "B", 13)
-    _write_line(pdf, "Details de la demande", height=8)
-    pdf.ln(1)
+    for group in grouped_labeled_data(req.request_type, req.data or {}):
+        if group["section"]:
+            pdf.set_font("Helvetica", "B", 13)
+            _write_line(pdf, group["section"], height=8)
+            pdf.ln(1)
 
-    for row in labeled_data(req.request_type, req.data or {}):
-        pdf.set_font("Helvetica", "B", 10)
-        _write_line(pdf, str(row["label"]))
-        pdf.set_font("Helvetica", "", 11)
-        _write_line(pdf, str(row["value"]) if row["value"] not in (None, "") else "-")
-        pdf.ln(2)
+        for row in group["rows"]:
+            pdf.set_font("Helvetica", "B", 10)
+            _write_line(pdf, str(row["label"]))
+            pdf.set_font("Helvetica", "", 11)
+            _write_line(pdf, str(row["value"]) if row["value"] not in (None, "") else "-")
+            pdf.ln(2)
 
     return bytes(pdf.output())

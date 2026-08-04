@@ -72,6 +72,26 @@ def build_dynamic_form(request_type, data=None, initial=None):
     return form_class(data=data, initial=initial)
 
 
+def grouped_form_fields(form, request_type):
+    """Regroupe les champs liés (BoundField) d'un formulaire dynamique par
+    section (voir grouped_labeled_data) — sert à afficher request_form.html
+    avec les mêmes sous-titres que le détail de la demande et le PDF."""
+    field_defs = request_type.form_schema.get("fields", [])
+    sections = {f["name"]: f.get("section", "") for f in field_defs}
+
+    groups = []
+    index_by_section = {}
+    for bound_field in form:
+        section = sections.get(bound_field.name, "")
+        if section not in index_by_section:
+            index_by_section[section] = len(groups)
+            groups.append({"section": section, "fields": []})
+        groups[index_by_section[section]]["fields"].append(bound_field)
+
+    groups.sort(key=lambda g: g["section"] != "")
+    return groups
+
+
 def labeled_data(request_type, data):
     """Associe chaque valeur de Request.data à son label configuré dans le
     form_schema (au lieu du nom technique, ex: "date_debut" -> "Date de début"),
@@ -79,6 +99,7 @@ def labeled_data(request_type, data):
     (champ supprimé depuis) gardent leur nom technique en repli."""
     field_defs = request_type.form_schema.get("fields", [])
     labels = {f["name"]: f.get("label") or f["name"].replace("_", " ").capitalize() for f in field_defs}
+    sections = {f["name"]: f.get("section", "") for f in field_defs}
     decimal_fields = {f["name"] for f in field_defs if f["type"] == "decimal"}
     currency = request_type.default_currency
 
@@ -88,12 +109,40 @@ def labeled_data(request_type, data):
         name = field_def["name"]
         if name not in data:
             continue
-        rows.append({"label": labels[name], "value": _format_value(data[name], name in decimal_fields, currency)})
+        rows.append({
+            "label": labels[name],
+            "value": _format_value(data[name], name in decimal_fields, currency),
+            "section": sections[name],
+        })
         seen.add(name)
     for name, value in data.items():
         if name not in seen:
-            rows.append({"label": labels.get(name, name), "value": _format_value(value, name in decimal_fields, currency)})
+            rows.append({
+                "label": labels.get(name, name),
+                "value": _format_value(value, name in decimal_fields, currency),
+                "section": sections.get(name, ""),
+            })
     return rows
+
+
+def grouped_labeled_data(request_type, data):
+    """Comme labeled_data, mais regroupé par section (retour client : un PDF
+    papier existant présente ses champs sous des sous-titres comme
+    "Informations sur le demandeur" — voir RequestType.form_schema, clé
+    "section" par champ). Les champs sans section vont dans un groupe sans
+    titre, en premier ; l'ordre des groupes suit leur première apparition
+    dans form_schema."""
+    groups = []
+    index_by_section = {}
+    for row in labeled_data(request_type, data):
+        section = row["section"]
+        if section not in index_by_section:
+            index_by_section[section] = len(groups)
+            groups.append({"section": section, "rows": []})
+        groups[index_by_section[section]]["rows"].append(row)
+
+    groups.sort(key=lambda g: g["section"] != "")  # groupe sans titre toujours en premier
+    return groups
 
 
 def _format_value(value, is_decimal=False, currency=""):

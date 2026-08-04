@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import reports as reports_module
-from .forms import PersonalInfoForm, ProfilePhotoForm, build_dynamic_form, labeled_data
+from .forms import PersonalInfoForm, ProfilePhotoForm, build_dynamic_form, grouped_labeled_data, labeled_data
 from .models import Request, RequestAttachment, RequestType, UserProfile
 from .pdf_export import generate_request_summary_pdf
 from .services import RoutingError, WorkflowEngine
@@ -462,7 +462,7 @@ def request_detail(request, pk):
         request, "approvals/request_detail.html",
         {
             "req": req,
-            "data_rows": labeled_data(req.request_type, req.data),
+            "data_groups": grouped_labeled_data(req.request_type, req.data),
             "logs": req.logs.select_related("actor"),
             "attachments": req.attachments.all(),
             "is_current_approver": is_current_approver,

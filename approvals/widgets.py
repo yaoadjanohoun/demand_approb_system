@@ -53,6 +53,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
       <tr>
         <th style="text-align:left; padding:4px;">Nom technique</th>
         <th style="text-align:left; padding:4px;">Label affiché</th>
+        <th style="text-align:left; padding:4px;">Section</th>
         <th style="text-align:left; padding:4px;">Type</th>
         <th style="text-align:left; padding:4px;">Obligatoire</th>
         <th style="text-align:left; padding:4px;">Champ montant</th>
@@ -65,7 +66,9 @@ class FormSchemaBuilderWidget(forms.Textarea):
   <p style="color:#6b7280; font-size:0.85em; margin-top:6px;">
     "Champ montant" : à cocher sur le champ numérique utilisé par les critères d'approbation
     "Montant minimum"/"Montant maximum" (Règles d'approbation) — sinon ces critères ne
-    correspondront jamais.
+    correspondront jamais.<br>
+    "Section" : regroupe les champs sous un même sous-titre dans le formulaire et le PDF
+    (ex: "Informations sur le demandeur") — laisser vide pour ne pas regrouper.
   </p>
   <div style="display:none;">{textarea_html}</div>
 </div>
@@ -79,7 +82,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
   const addBtn = container.querySelector(".fsb-add");
 
   function makeRow(field) {{
-    field = field || {{name: "", label: "", type: "text", required: false}};
+    field = field || {{name: "", label: "", type: "text", required: false, section: ""}};
     const tr = document.createElement("tr");
     tr.className = "fsb-row";
 
@@ -102,6 +105,15 @@ class FormSchemaBuilderWidget(forms.Textarea):
     labelInput.value = field.label || "";
     labelInput.style.width = "100%";
     labelTd.appendChild(labelInput);
+
+    const sectionTd = document.createElement("td");
+    const sectionInput = document.createElement("input");
+    sectionInput.type = "text";
+    sectionInput.className = "fsb-section";
+    sectionInput.placeholder = "ex: Informations sur le demandeur";
+    sectionInput.value = field.section || "";
+    sectionInput.style.width = "100%";
+    sectionTd.appendChild(sectionInput);
 
     const typeTd = document.createElement("td");
     const typeSelect = document.createElement("select");
@@ -149,6 +161,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
 
     tr.appendChild(nameTd);
     tr.appendChild(labelTd);
+    tr.appendChild(sectionTd);
     tr.appendChild(typeTd);
     tr.appendChild(reqTd);
     tr.appendChild(amountTd);
@@ -174,12 +187,17 @@ class FormSchemaBuilderWidget(forms.Textarea):
       if (tr.querySelector(".fsb-amount-field").checked && name) {{
         amountField = name;
       }}
-      return {{
+      const section = tr.querySelector(".fsb-section").value.trim();
+      const result = {{
         name: name,
         label: tr.querySelector(".fsb-label").value.trim(),
         type: tr.querySelector(".fsb-type").value,
         required: tr.querySelector(".fsb-required").checked,
       }};
+      if (section) {{
+        result.section = section;
+      }}
+      return result;
     }}).filter(function(f) {{ return f.name !== ""; }});
     const payload = {{fields: fields}};
     if (amountField) {{

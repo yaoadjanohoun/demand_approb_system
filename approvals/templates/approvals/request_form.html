@@ -1,4 +1,5 @@
 {% extends "approvals/base.html" %}
+{% load approvals_extras %}
 {% block title %}{{ request_type.name }}{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -21,15 +22,18 @@
         {{ form.non_field_errors }}
 
         <div class="form-fields">
-            {% for field in form %}
-                <div class="form-field">
-                    <label for="{{ field.id_for_label }}">
-                        {{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}
-                    </label>
-                    {{ field }}
-                    {% if field.help_text %}<p class="field-help">{{ field.help_text }}</p>{% endif %}
-                    {{ field.errors }}
-                </div>
+            {% for group in form|group_fields:request_type %}
+                {% if group.section %}<h3 style="margin:1rem 0 0.4rem;">{{ group.section }}</h3>{% endif %}
+                {% for field in group.fields %}
+                    <div class="form-field">
+                        <label for="{{ field.id_for_label }}">
+                            {{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}
+                        </label>
+                        {{ field }}
+                        {% if field.help_text %}<p class="field-help">{{ field.help_text }}</p>{% endif %}
+                        {{ field.errors }}
+                    </div>
+                {% endfor %}
             {% endfor %}
 
             <div class="form-field">

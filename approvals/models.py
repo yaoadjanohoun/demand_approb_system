@@ -14,10 +14,13 @@ from .validators import (
     validate_form_schema,
 )
 
+#fonction pour générer les tokens secrets
 
 def _generate_token():
     return secrets.token_urlsafe(32)
 
+
+# taille maximum d'une photo de profil
 
 PROFILE_PHOTO_MAX_SIZE_MB = 2
 
@@ -191,6 +194,53 @@ class RequestType(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class DocumentBranding(models.Model):
+    """Habillage du PDF résumé (voir approvals/pdf_export.py) : en-tête,
+    pied de page — propre à chaque type de demande, plutôt qu'un habillage
+    unique global, pour coller à l'en-tête réel des formulaires papier
+    existants (ex: numéro de document, mentions spécifiques à un service)."""
+
+    request_type = models.OneToOneField(
+        RequestType, on_delete=models.CASCADE, related_name="branding"
+    )
+    header_text = models.TextField(
+        blank=True,
+        help_text="Affiché en haut du PDF, sous les logos (ex: adresse de l'entreprise, "
+        "numéro de document, date de révision).",
+    )
+    footer_text = models.TextField(
+        blank=True,
+        help_text="Affiché en bas de chaque page du PDF (ex: mentions légales).",
+    )
+
+    class Meta:
+        verbose_name = "Habillage de document"
+        verbose_name_plural = "Habillages de document"
+
+    def __str__(self):
+        return f"Habillage — {self.request_type.name}"
+
+
+def _validate_logo_extension(value):
+    FileExtensionValidator(["png", "jpg", "jpeg"])(value)
+
+
+class BrandingLogo(models.Model):
+    """Un logo parmi plusieurs possibles pour un même habillage (retour
+    client : logos multiples, ex: logo de l'entreprise + logo d'une
+    certification) — affichés côte à côte en en-tête du PDF, dans l'ordre."""
+
+    branding = models.ForeignKey(DocumentBranding, on_delete=models.CASCADE, related_name="logos")
+    image = models.ImageField(upload_to="branding_logos/%Y/%m/", validators=[_validate_logo_extension])
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"Logo #{self.order} — {self.branding.request_type.name}"
 
 
 class ApprovalRule(models.Model):

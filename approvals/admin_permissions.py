@@ -16,6 +16,10 @@ def can_view_approvalrule(request):
     return request.user.has_perm("approvals.view_approvalrule")
 
 
+def can_view_documentbranding(request):
+    return request.user.has_perm("approvals.view_documentbranding")
+
+
 def can_view_delegation(request):
     return request.user.has_perm("approvals.view_delegation")
 

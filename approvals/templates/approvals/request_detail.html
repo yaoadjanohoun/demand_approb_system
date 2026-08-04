@@ -20,11 +20,14 @@
 <div style="display:flex; gap:1.25rem; align-items:flex-start; flex-wrap:wrap;">
 <div class="card" style="flex:1 1 420px; min-width:320px;">
     <div class="card-title">Détails</div>
-    <table>
-        {% for row in data_rows %}
-            <tr><th>{{ row.label }}</th><td>{{ row.value }}</td></tr>
-        {% endfor %}
-    </table>
+    {% for group in data_groups %}
+        {% if group.section %}<h3 style="margin:1rem 0 0.4rem;">{{ group.section }}</h3>{% endif %}
+        <table>
+            {% for row in group.rows %}
+                <tr><th>{{ row.label }}</th><td>{{ row.value }}</td></tr>
+            {% endfor %}
+        </table>
+    {% endfor %}
 
     {% if is_requester and req.status == "RETURNED" %}
         <p style="margin-top:1rem;"><a class="btn btn-primary" href="{% url 'approvals:request_edit' req.pk %}">Corriger et resoumettre</a></p>
