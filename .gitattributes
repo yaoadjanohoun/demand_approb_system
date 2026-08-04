@@ -1,0 +1,3 @@
+# Bibliothèques tierces vendues telles quelles : jamais de conversion de
+# fin de ligne (le fichier minifié doit rester identique à l'original).
+approvals/static/approvals/vendor/* -text

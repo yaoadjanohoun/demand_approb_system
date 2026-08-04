@@ -1,0 +1,192 @@
+{% extends "approvals/base.html" %}
+{% load static %}
+{% block title %}Mise en page — {{ request_type.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <div>
+        <a class="back-link" href="{% url 'admin:approvals_requesttype_changelist' %}">← Types de demande</a>
+        <h1>Mise en page du PDF — {{ request_type.name }}</h1>
+    </div>
+</div>
+
+<style>
+    .dte-layout { display: flex; gap: 1.25rem; align-items: flex-start; flex-wrap: wrap; }
+    .dte-sidebar { flex: 0 0 220px; }
+    .dte-sidebar .card-title { margin-top: 1rem; }
+    .dte-sidebar button, .dte-sidebar .dte-logo-btn { display: block; width: 100%; margin-bottom: 0.35rem; text-align: left; }
+    .dte-toolbar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.75rem; }
+    .dte-toolbar select, .dte-toolbar input[type="number"] { width: auto; }
+    #dte-canvas-wrap { border: 1px solid var(--border, #ddd); display: inline-block; }
+    .dte-logo-btn img { max-height: 30px; vertical-align: middle; margin-right: 0.4rem; }
+</style>
+
+{% for font in fonts %}
+<style>
+@font-face {
+    font-family: "{{ font.name }}";
+    src: url("{{ font.regular_ttf.url }}");
+}
+</style>
+{% endfor %}
+
+<div class="dte-layout">
+    <div class="card dte-sidebar">
+        <div class="card-title">Champs du formulaire</div>
+        {% for field in fields %}
+            <button type="button" class="btn btn-secondary btn-sm dte-add-field" data-field="{{ field.name }}" data-label="{{ field.label|default:field.name }}">
+                {{ field.label|default:field.name }}
+            </button>
+        {% empty %}
+            <p class="card-note">Aucun champ configuré pour ce type de demande.</p>
+        {% endfor %}
+
+        <div class="card-title">Texte</div>
+        <button type="button" class="btn btn-secondary btn-sm" id="dte-add-text">+ Texte libre</button>
+
+        <div class="card-title">Logos</div>
+        {% for logo in logos %}
+            <button type="button" class="btn btn-secondary btn-sm dte-logo-btn" data-logo-id="{{ logo.id }}" data-logo-url="{{ logo.image.url }}">
+                <img src="{{ logo.image.url }}" alt="">Logo #{{ logo.order }}
+            </button>
+        {% empty %}
+            <p class="card-note">Aucun logo — ajoute-en un via "Habillage de document".</p>
+        {% endfor %}
+
+        <div class="card-title">&nbsp;</div>
+        <button type="button" class="btn btn-secondary btn-sm" id="dte-delete-selected">Supprimer la sélection</button>
+    </div>
+
+    <div class="card" style="flex:1 1 auto;">
+        <div class="dte-toolbar">
+            <select id="dte-font-family">
+                <option value="Helvetica">Helvetica</option>
+                <option value="Times">Times</option>
+                <option value="Courier">Courier</option>
+                {% for font in fonts %}
+                    <option value="{{ font.name }}">{{ font.name }}</option>
+                {% endfor %}
+            </select>
+            <input type="number" id="dte-font-size" value="12" min="6" max="72" style="width:4rem;">
+            <button type="button" class="btn btn-secondary btn-sm" id="dte-bold"><b>G</b></button>
+            <button type="button" class="btn btn-secondary btn-sm" id="dte-italic"><i>I</i></button>
+            <input type="color" id="dte-color" value="#000000">
+            <button type="button" class="btn btn-secondary btn-sm" id="dte-align-left">⇤</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="dte-align-center">≡</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="dte-align-right">⇥</button>
+        </div>
+        <div id="dte-canvas-wrap">
+            <canvas id="dte-canvas" width="{{ page_width_mm|floatformat:0 }}" height="{{ page_height_mm|floatformat:0 }}"></canvas>
+        </div>
+        <p class="card-note" style="margin-top:0.5rem;">
+            Les champs liés au formulaire affichent leur nom technique ici (ex: "departement") — au moment de la
+            génération du PDF, ils sont remplacés par la vraie valeur saisie par le demandeur.
+        </p>
+        <form method="post" id="dte-save-form" style="margin-top:0.75rem;">
+            {% csrf_token %}
+            <input type="hidden" name="canvas_json" id="dte-canvas-json">
+            <button type="submit" class="btn btn-primary">Enregistrer la mise en page</button>
+        </form>
+    </div>
+</div>
+
+<script src="{% static 'approvals/vendor/fabric.min.js' %}"></script>
+<script>
+(function() {
+    var PX_PER_MM = 3;
+    var canvasEl = document.getElementById("dte-canvas");
+    canvasEl.width = {{ page_width_mm }} * PX_PER_MM;
+    canvasEl.height = {{ page_height_mm }} * PX_PER_MM;
+
+    var canvas = new fabric.Canvas("dte-canvas", { backgroundColor: "#ffffff" });
+
+    var initialJson = {{ template.canvas_json|default:"{}"|safe }};
+    if (initialJson && initialJson.objects && initialJson.objects.length) {
+        canvas.loadFromJSON(initialJson, function() { canvas.renderAll(); });
+    }
+
+    function addTextbox(text, data) {
+        var box = new fabric.Textbox(text, {
+            left: 20, top: 20, width: 200,
+            fontFamily: "Helvetica", fontSize: 14, fill: "#000000",
+            data: data || {},
+        });
+        canvas.add(box);
+        canvas.setActiveObject(box);
+    }
+
+    document.querySelectorAll(".dte-add-field").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            addTextbox("{{" + btn.dataset.field + "}}", { field: btn.dataset.field });
+        });
+    });
+
+    document.getElementById("dte-add-text").addEventListener("click", function() {
+        addTextbox("Texte", {});
+    });
+
+    document.querySelectorAll(".dte-logo-btn").forEach(function(btn) {
+        btn.addEventListener("click", function() {
+            fabric.Image.fromURL(btn.dataset.logoUrl, function(img) {
+                img.set({ left: 20, top: 20, data: { logoId: parseInt(btn.dataset.logoId, 10) } });
+                img.scaleToWidth(60);
+                canvas.add(img);
+                canvas.setActiveObject(img);
+            }, { crossOrigin: "anonymous" });
+        });
+    });
+
+    document.getElementById("dte-delete-selected").addEventListener("click", function() {
+        var active = canvas.getActiveObjects();
+        active.forEach(function(obj) { canvas.remove(obj); });
+        canvas.discardActiveObject();
+        canvas.renderAll();
+    });
+
+    function activeTextbox() {
+        var obj = canvas.getActiveObject();
+        return (obj && obj.type === "textbox") ? obj : null;
+    }
+
+    document.getElementById("dte-font-family").addEventListener("change", function(e) {
+        var box = activeTextbox();
+        if (box) { box.set("fontFamily", e.target.value); canvas.renderAll(); }
+    });
+    document.getElementById("dte-font-size").addEventListener("change", function(e) {
+        var box = activeTextbox();
+        if (box) { box.set("fontSize", parseInt(e.target.value, 10) || 12); canvas.renderAll(); }
+    });
+    document.getElementById("dte-color").addEventListener("input", function(e) {
+        var box = activeTextbox();
+        if (box) { box.set("fill", e.target.value); canvas.renderAll(); }
+    });
+    document.getElementById("dte-bold").addEventListener("click", function() {
+        var box = activeTextbox();
+        if (box) { box.set("fontWeight", box.fontWeight === "bold" ? "normal" : "bold"); canvas.renderAll(); }
+    });
+    document.getElementById("dte-italic").addEventListener("click", function() {
+        var box = activeTextbox();
+        if (box) { box.set("fontStyle", box.fontStyle === "italic" ? "normal" : "italic"); canvas.renderAll(); }
+    });
+    ["left", "center", "right"].forEach(function(align) {
+        document.getElementById("dte-align-" + align).addEventListener("click", function() {
+            var box = activeTextbox();
+            if (box) { box.set("textAlign", align); canvas.renderAll(); }
+        });
+    });
+
+    canvas.on("selection:created", syncToolbarFromSelection);
+    canvas.on("selection:updated", syncToolbarFromSelection);
+    function syncToolbarFromSelection() {
+        var box = activeTextbox();
+        if (!box) return;
+        document.getElementById("dte-font-family").value = box.fontFamily || "Helvetica";
+        document.getElementById("dte-font-size").value = box.fontSize || 14;
+        document.getElementById("dte-color").value = box.fill || "#000000";
+    }
+
+    document.getElementById("dte-save-form").addEventListener("submit", function() {
+        document.getElementById("dte-canvas-json").value = JSON.stringify(canvas.toJSON(["data"]));
+    });
+})();
+</script>
+{% endblock %}

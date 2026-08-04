@@ -20,6 +20,10 @@ def can_view_documentbranding(request):
     return request.user.has_perm("approvals.view_documentbranding")
 
 
+def can_view_customfont(request):
+    return request.user.has_perm("approvals.view_customfont")
+
+
 def can_view_delegation(request):
     return request.user.has_perm("approvals.view_delegation")
 

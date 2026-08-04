@@ -14,6 +14,10 @@ urlpatterns = [
     path("pending/", views.pending_approvals, name="pending_approvals"),
     path("rapports/", views.reports, name="reports"),
     path("rapports/export/", views.reports_export, name="reports_export"),
+    path(
+        "mise-en-page/<int:type_id>/", views.document_template_editor,
+        name="document_template_editor",
+    ),
     path("new/<int:type_id>/", views.request_create, name="request_create"),
     path("<uuid:pk>/", views.request_detail, name="request_detail"),
     path("<uuid:pk>/pdf/", views.request_download_pdf, name="request_download_pdf"),

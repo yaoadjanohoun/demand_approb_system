@@ -247,6 +247,67 @@ class BrandingLogo(models.Model):
         return f"Logo #{self.order} — {self.branding.request_type.name}"
 
 
+def _validate_ttf_extension(value):
+    FileExtensionValidator(["ttf"])(value)
+
+
+class CustomFont(models.Model):
+    """Police personnalisée (ex: la police officielle de l'entreprise),
+    utilisable dans l'éditeur visuel de mise en page (voir DocumentTemplate)
+    — réutilisable sur plusieurs types de demande, comme les logos. Seul
+    le fichier "normal" est obligatoire ; les variantes gras/italique sont
+    utilisées si fournies, sinon fpdf2 simule un style approché à partir
+    du fichier normal."""
+
+    name = models.CharField(max_length=100, unique=True, validators=[validate_entity_name])
+    regular_ttf = models.FileField(upload_to="custom_fonts/", validators=[_validate_ttf_extension])
+    bold_ttf = models.FileField(
+        upload_to="custom_fonts/", blank=True, null=True, validators=[_validate_ttf_extension]
+    )
+    italic_ttf = models.FileField(
+        upload_to="custom_fonts/", blank=True, null=True, validators=[_validate_ttf_extension]
+    )
+    bold_italic_ttf = models.FileField(
+        upload_to="custom_fonts/", blank=True, null=True, validators=[_validate_ttf_extension]
+    )
+
+    class Meta:
+        verbose_name = "Police personnalisée"
+        verbose_name_plural = "Polices personnalisées"
+
+    def __str__(self):
+        return self.name
+
+
+#Document A4
+DOCUMENT_TEMPLATE_PAGE_WIDTH_MM = 210  # A4
+DOCUMENT_TEMPLATE_PAGE_HEIGHT_MM = 297
+
+
+class DocumentTemplate(models.Model):
+    """Mise en page du PDF dessinée librement par un admin (éditeur visuel,
+    voir approvals/templates/approvals/document_template_editor.html et
+    approvals/pdf_export.py) — remplace le rendu automatique (sections +
+    DocumentBranding) pour ce type de demande quand elle existe. Format A4
+    fixe pour l'instant (pas de configuration par type de demande)."""
+
+    request_type = models.OneToOneField(
+        RequestType, on_delete=models.CASCADE, related_name="document_template"
+    )
+    canvas_json = models.JSONField(
+        default=dict, blank=True,
+        help_text="Représentation Fabric.js de la mise en page — ne pas modifier manuellement, "
+        "généré par l'éditeur visuel.",
+    )
+
+    class Meta:
+        verbose_name = "Mise en page personnalisée"
+        verbose_name_plural = "Mises en page personnalisées"
+
+    def __str__(self):
+        return f"Mise en page — {self.request_type.name}"
+
+
 class ApprovalRule(models.Model):
     """QUI approuve QUOI, sous QUELLES conditions, à quel niveau."""
 

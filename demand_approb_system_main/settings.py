@@ -397,6 +397,12 @@ UNFOLD = {
                         "permission": "approvals.admin_permissions.can_view_documentbranding",
                     },
                     {
+                        "title": "Polices personnalisées",
+                        "icon": "text_fields",
+                        "link": reverse_lazy("admin:approvals_customfont_changelist"),
+                        "permission": "approvals.admin_permissions.can_view_customfont",
+                    },
+                    {
                         "title": "Délégations",
                         "icon": "swap_horiz",
                         "link": reverse_lazy("admin:approvals_delegation_changelist"),

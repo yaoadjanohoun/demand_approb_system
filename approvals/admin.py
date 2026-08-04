@@ -5,6 +5,7 @@ from django.contrib.auth.models import Group, User
 from django.db import models
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.html import format_html
 from django_json_widget.widgets import JSONEditorWidget
 from unfold.admin import ModelAdmin
 from unfold.decorators import action, display
@@ -12,8 +13,8 @@ from unfold.forms import AdminPasswordChangeForm, BaseDialogForm, UserChangeForm
 from unfold.widgets import UnfoldAdminSelectWidget, UnfoldAdminTextareaWidget
 
 from .models import (
-    ApprovalLog, ApprovalRule, BrandingLogo, Delegation, Department, DocumentBranding, EmailSettings,
-    Request, RequestAttachment, RequestType, Role, Site, UserProfile, system_role_label,
+    ApprovalLog, ApprovalRule, BrandingLogo, CustomFont, Delegation, Department, DocumentBranding,
+    EmailSettings, Request, RequestAttachment, RequestType, Role, Site, UserProfile, system_role_label,
 )
 from .services import RoutingError, WorkflowEngine
 from .validators import validate_entity_name, validate_person_name
@@ -296,11 +297,16 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
     field_widgets = {"form_schema": FormSchemaBuilderWidget}
     list_display = (
         "name", "code", "is_active", "schema_version", "resume_on_resubmit",
-        "is_sensitive", "default_rule_display",
+        "is_sensitive", "default_rule_display", "template_editor_link",
     )
     list_filter = ("is_active", "is_sensitive")
     search_fields = ("name", "code")
     inlines = [ApprovalRuleInline]
+
+    @display(description="Mise en page PDF")
+    def template_editor_link(self, obj):
+        url = reverse("approvals:document_template_editor", args=[obj.pk])
+        return format_html('<a href="{}">Concevoir le PDF →</a>', url)
 
     @display(description="Règle par défaut (dernier niveau)", boolean=True)
     def default_rule_display(self, obj):
@@ -377,6 +383,12 @@ class DocumentBrandingAdmin(NamedFieldWidgetMixin, ModelAdmin):
             },
         ),
     )
+
+
+@admin.register(CustomFont)
+class CustomFontAdmin(ModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
 
 
 # creation de modèle des règles d'approbation d'un compte admin

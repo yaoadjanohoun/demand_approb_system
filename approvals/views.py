@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
@@ -15,7 +17,10 @@ from django.utils import timezone
 
 from . import reports as reports_module
 from .forms import PersonalInfoForm, ProfilePhotoForm, build_dynamic_form, grouped_labeled_data, labeled_data
-from .models import Request, RequestAttachment, RequestType, UserProfile
+from .models import (
+    BrandingLogo, CustomFont, DOCUMENT_TEMPLATE_PAGE_HEIGHT_MM, DOCUMENT_TEMPLATE_PAGE_WIDTH_MM,
+    DocumentTemplate, Request, RequestAttachment, RequestType, UserProfile,
+)
 from .pdf_export import generate_request_summary_pdf
 from .services import RoutingError, WorkflowEngine
 
@@ -544,6 +549,39 @@ def reports(request):
 @staff_member_required
 def reports_export(request):
     return reports_module.export_requests_csv()
+
+
+@staff_member_required
+def document_template_editor(request, type_id):
+    """Éditeur visuel (Fabric.js) de la mise en page du PDF pour un type de
+    demande — voir DocumentTemplate. Remplace le rendu automatique pour ce
+    type quand une mise en page y est enregistrée."""
+    request_type = get_object_or_404(RequestType, pk=type_id)
+    template, _ = DocumentTemplate.objects.get_or_create(request_type=request_type)
+
+    if request.method == "POST":
+        try:
+            canvas_json = json.loads(request.POST.get("canvas_json", "{}"))
+        except ValueError:
+            return HttpResponseBadRequest("JSON invalide.")
+        template.canvas_json = canvas_json
+        template.save()
+        messages.success(request, "Mise en page enregistrée.")
+        return redirect("approvals:document_template_editor", type_id=type_id)
+
+    logos = BrandingLogo.objects.filter(branding__request_type=request_type)
+    return render(
+        request, "approvals/document_template_editor.html",
+        {
+            "request_type": request_type,
+            "template": template,
+            "fields": request_type.form_schema.get("fields", []),
+            "fonts": CustomFont.objects.all(),
+            "logos": logos,
+            "page_width_mm": DOCUMENT_TEMPLATE_PAGE_WIDTH_MM,
+            "page_height_mm": DOCUMENT_TEMPLATE_PAGE_HEIGHT_MM,
+        },
+    )
 
 
 # Django n'affiche par défaut aucun détail sur un 400 (page brute "Bad
