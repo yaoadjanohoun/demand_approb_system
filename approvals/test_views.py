@@ -953,3 +953,49 @@ class TrackLastSeenMiddlewareTests(TestCase):
         self.client.get("/")
         profile = UserProfile.objects.get(user=user)
         self.assertGreater(profile.last_seen_at, stale)
+
+
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+class ReferenceFormPdfTests(TestCase):
+    """Un type de demande peut avoir un PDF de référence (ex: le formulaire
+    papier existant), affiché au demandeur (formulaire de saisie) et à
+    l'approbateur (détail de la demande) — à titre d'information seulement,
+    la saisie reste faite via form_schema."""
+
+    @classmethod
+    def tearDownClass(cls):
+        from django.conf import settings
+
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def _tiny_pdf(self, name="reference.pdf"):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        return SimpleUploadedFile(name, b"%PDF-1.4 fake content", content_type="application/pdf")
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee_pdf", password="x")
+        self.request_type = RequestType.objects.create(
+            name="Nouveau rapport", code="REPORT", form_schema={"fields": []}
+        )
+        self.client.login(username="employee_pdf", password="x")
+
+    def test_reference_pdf_shown_on_request_form_when_configured(self):
+        self.request_type.reference_form_pdf.save("reference.pdf", self._tiny_pdf(), save=True)
+        response = self.client.get(f"/new/{self.request_type.id}/")
+        self.assertContains(response, "Document de référence")
+        self.assertContains(response, self.request_type.reference_form_pdf.url)
+
+    def test_no_reference_pdf_panel_when_not_configured(self):
+        response = self.client.get(f"/new/{self.request_type.id}/")
+        self.assertNotContains(response, "Document de référence")
+
+    def test_reference_pdf_shown_on_request_detail(self):
+        self.request_type.reference_form_pdf.save("reference.pdf", self._tiny_pdf(), save=True)
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee, data={}
+        )
+        response = self.client.get(f"/{req.pk}/")
+        self.assertContains(response, "Document de référence")
+        self.assertContains(response, self.request_type.reference_form_pdf.url)

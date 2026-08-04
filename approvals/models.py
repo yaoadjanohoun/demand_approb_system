@@ -178,6 +178,16 @@ class RequestType(models.Model):
         help_text="Compteur interne utilisé pour générer la référence (ex: EXPENSE-000001) "
         "de chaque nouvelle demande de ce type — ne pas modifier manuellement.",
     )
+    reference_form_pdf = models.FileField(
+        upload_to="request_type_forms/%Y/%m/",
+        blank=True,
+        null=True,
+        validators=[FileExtensionValidator(["pdf"])],
+        help_text="Document PDF expliquant ce qui est attendu pour ce type de demande "
+        "(ex: le formulaire papier existant). Affiché au demandeur à côté du formulaire "
+        "en ligne, et à l'approbateur lors de la révision — à titre de référence, les "
+        "champs ci-dessus restent la source des données enregistrées.",
+    )
 
     def __str__(self):
         return self.name

@@ -323,6 +323,17 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
             },
         ),
         (
+            "Document de référence (PDF)",
+            {
+                "fields": ("reference_form_pdf",),
+                "description": (
+                    "PDF optionnel affiché au demandeur et à l'approbateur à titre de référence "
+                    "(ex: le formulaire papier existant) — les champs configurés ci-dessus "
+                    "restent la source des données enregistrées, ce PDF n'est pas rempli automatiquement."
+                ),
+            },
+        ),
+        (
             "Options avancées",
             {"fields": ("resume_on_resubmit", "is_sensitive", "default_currency")},
         ),

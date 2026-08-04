@@ -14,7 +14,8 @@
         </h1>
     </div>
 </div>
-<div class="card">
+<div style="display:flex; gap:1.25rem; align-items:flex-start; flex-wrap:wrap;">
+<div class="card" style="flex:1 1 420px; min-width:320px;">
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
         {{ form.non_field_errors }}
@@ -79,6 +80,21 @@
             </button>
         </p>
     </form>
+</div>
+{% if request_type.reference_form_pdf %}
+    <div class="card" style="flex:1 1 380px; min-width:280px; max-width:480px;">
+        <div class="card-title">Document de référence</div>
+        <p class="card-note">
+            Explique ce qui est attendu pour ce type de demande — remplis le formulaire
+            à gauche avec ces informations, ce document n'est pas à envoyer séparément.
+        </p>
+        <iframe src="{{ request_type.reference_form_pdf.url }}" title="Document de référence"
+                style="width:100%; height:600px; border:1px solid var(--border, #ddd); border-radius:6px;"></iframe>
+        <p class="card-note" style="margin-top:0.5rem;">
+            <a href="{{ request_type.reference_form_pdf.url }}" target="_blank" rel="noopener">Ouvrir dans un nouvel onglet</a>
+        </p>
+    </div>
+{% endif %}
 </div>
 <script>
     // Vérifie type + taille avant l'envoi (retour client : un fichier trop
