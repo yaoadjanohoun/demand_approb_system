@@ -48,6 +48,16 @@ _TYPOGRAPHIC_REPLACEMENTS = {
 _LOGO_HEIGHT_MM = 14
 _LOGO_GAP_MM = 6
 
+# Rendu automatique (voir _generate_auto_layout) : bleu-gris sobre pour les
+# titres de section et les filets, cohérent avec un document d'entreprise
+# sans dépendre d'une couleur de marque non configurée.
+_ACCENT_RGB = (31, 58, 95)
+_COL_GUTTER_MM = 6
+# Deux champs courts (ex: "Département" / "Date") tiennent côte à côte sur
+# une même ligne, comme les formulaires papier existants — un seuil de
+# longueur évite qu'une valeur longue ne déborde de sa colonne.
+_SHORT_VALUE_MAX_CHARS = 30
+
 
 def _pdf_safe(text):
     for original, replacement in _TYPOGRAPHIC_REPLACEMENTS.items():
@@ -57,6 +67,74 @@ def _pdf_safe(text):
 
 def _write_line(pdf, text, height=6):
     pdf.multi_cell(0, height, _pdf_safe(text), **_NEXT_LINE)
+
+
+# new_x=LEFT (pas LMARGIN) : ramène le curseur au bord gauche de LA COLONNE
+# (pas de la page) après chaque ligne, pour empiler label/valeur dans une
+# colonne sans dériver vers la marge de page.
+_COL_NEXT_LINE = {"new_x": XPos.LEFT, "new_y": YPos.NEXT}
+
+
+def _write_col_line(pdf, text, width, height=6):
+    pdf.multi_cell(width, height, _pdf_safe(text), **_COL_NEXT_LINE)
+
+
+def _display_value(row):
+    return str(row["value"]) if row["value"] not in (None, "") else "-"
+
+
+def _is_short_value(value_str):
+    return "\n" not in value_str and len(value_str) <= _SHORT_VALUE_MAX_CHARS
+
+
+def _render_two_col_row(pdf, left_row, right_row, col_width):
+    """Affiche un ou deux champs côte à côte (label en petit/gras au-dessus
+    de la valeur) — retombe sur une seule colonne si right_row est None
+    (dernier champ impair d'une section)."""
+    y0 = pdf.get_y()
+    x_left = pdf.l_margin
+    x_right = x_left + col_width + _COL_GUTTER_MM
+
+    pdf.set_xy(x_left, y0)
+    pdf.set_font("Helvetica", "B", 9)
+    _write_col_line(pdf, str(left_row["label"]).upper(), col_width, height=5)
+    pdf.set_font("Helvetica", "", 11)
+    _write_col_line(pdf, _display_value(left_row), col_width, height=6)
+
+    if right_row is not None:
+        pdf.set_xy(x_right, y0)
+        pdf.set_font("Helvetica", "B", 9)
+        _write_col_line(pdf, str(right_row["label"]).upper(), col_width, height=5)
+        pdf.set_font("Helvetica", "", 11)
+        _write_col_line(pdf, _display_value(right_row), col_width, height=6)
+
+    pdf.set_xy(x_left, y0 + 13)
+
+
+def _render_field_rows(pdf, rows, col_width):
+    """Empile des paires de champs courts côte à côte, et les champs longs
+    (zone de texte) sur toute la largeur — mélange les deux dans l'ordre où
+    les champs apparaissent, comme sur les formulaires papier existants."""
+    pending = None
+    for row in rows:
+        value_str = _display_value(row)
+        if _is_short_value(value_str):
+            if pending is None:
+                pending = row
+            else:
+                _render_two_col_row(pdf, pending, row, col_width)
+                pending = None
+        else:
+            if pending is not None:
+                _render_two_col_row(pdf, pending, None, col_width)
+                pending = None
+            pdf.set_font("Helvetica", "B", 9)
+            _write_line(pdf, str(row["label"]).upper(), height=5)
+            pdf.set_font("Helvetica", "", 11)
+            _write_line(pdf, value_str, height=6)
+            pdf.ln(2)
+    if pending is not None:
+        _render_two_col_row(pdf, pending, None, col_width)
 
 
 class _BrandedPDF(FPDF):
@@ -87,11 +165,16 @@ class _BrandedPDF(FPDF):
         self.ln(2)
 
     def footer(self):
-        if not self._branding or not self._branding.footer_text:
-            return
-        self.set_y(-18)
-        self.set_font("Helvetica", "", 8)
-        self._write_html_no_page_break(_pdf_safe(self._branding.footer_text))
+        if self._branding and self._branding.footer_text:
+            self.set_y(-18)
+            self.set_font("Helvetica", "", 8)
+            self._write_html_no_page_break(_pdf_safe(self._branding.footer_text))
+
+        self.set_y(-10)
+        self.set_font("Helvetica", "I", 7)
+        self.set_text_color(120, 120, 120)
+        self.cell(0, 5, f"Page {self.page_no()}/{{nb}}", align="C")
+        self.set_text_color(0, 0, 0)
 
     def _write_html_no_page_break(self, html):
         """write_html() déclenche le saut de page automatique dès que la
@@ -239,34 +322,43 @@ def _generate_auto_layout(req):
 
     pdf = _BrandedPDF(branding)
     pdf.set_compression(False)  # PDF lisible en clair (pratique pour les tests, coût négligeable ici)
+    pdf.alias_nb_pages()  # {nb} dans footer() : nombre total de pages, résolu à la génération finale
     pdf.set_auto_page_break(auto=True, margin=25)
     pdf.add_page()
+    col_width = (pdf.w - pdf.l_margin - pdf.r_margin - _COL_GUTTER_MM) / 2
 
     pdf.set_font("Helvetica", "B", 16)
     _write_line(pdf, req.request_type.name, height=10)
+    pdf.ln(2)
 
-    pdf.set_font("Helvetica", "", 11)
-    meta_lines = [
-        f"Reference : {req.reference}",
-        f"Statut : {req.get_status_display()}",
-        f"Demandeur : {req.requester.get_full_name() or req.requester.username}",
-        f"Soumise le : {req.submitted_at.strftime('%d/%m/%Y %H:%M') if req.submitted_at else '-'}",
+    meta_rows = [
+        {"label": "Reference", "value": req.reference},
+        {"label": "Statut", "value": req.get_status_display()},
+        {"label": "Demandeur", "value": req.requester.get_full_name() or req.requester.username},
+        {"label": "Soumise le",
+         "value": req.submitted_at.strftime("%d/%m/%Y %H:%M") if req.submitted_at else "-"},
     ]
-    for line in meta_lines:
-        _write_line(pdf, line)
-    pdf.ln(4)
+    _render_two_col_row(pdf, meta_rows[0], meta_rows[1], col_width)
+    _render_two_col_row(pdf, meta_rows[2], meta_rows[3], col_width)
+    pdf.ln(2)
+
+    pdf.set_draw_color(*_ACCENT_RGB)
+    pdf.set_line_width(0.5)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.ln(5)
 
     for group in grouped_labeled_data(req.request_type, req.data or {}):
         if group["section"]:
             pdf.set_font("Helvetica", "B", 13)
+            pdf.set_text_color(*_ACCENT_RGB)
             _write_line(pdf, group["section"], height=8)
-            pdf.ln(1)
+            pdf.set_draw_color(*_ACCENT_RGB)
+            pdf.set_line_width(0.3)
+            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+            pdf.set_text_color(0, 0, 0)
+            pdf.ln(3)
 
-        for row in group["rows"]:
-            pdf.set_font("Helvetica", "B", 10)
-            _write_line(pdf, str(row["label"]))
-            pdf.set_font("Helvetica", "", 11)
-            _write_line(pdf, str(row["value"]) if row["value"] not in (None, "") else "-")
-            pdf.ln(2)
+        _render_field_rows(pdf, group["rows"], col_width)
+        pdf.ln(2)
 
     return bytes(pdf.output())
