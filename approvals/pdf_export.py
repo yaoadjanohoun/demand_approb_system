@@ -64,7 +64,8 @@ _TYPOGRAPHIC_REPLACEMENTS = {
 
 _LOGO_HEIGHT_MM = 14
 _LOGO_GAP_MM = 6
-_FOOTER_IMAGE_HEIGHT_MM = 10
+_FOOTER_IMAGE_HEIGHT_MM = 8
+_FOOTER_TOP_MM = 24
 
 # Rendu automatique (voir _generate_auto_layout) : bleu-gris sobre pour les
 # titres de section et les filets, cohérent avec un document d'entreprise
@@ -291,13 +292,19 @@ class _BrandedPDF(FPDF):
     def footer(self):
         if not self._branding:
             return
+        # L'image est posée sur sa propre ligne, au-dessus du texte, plutôt
+        # qu'au même niveau (retour client : le texte ramené à gauche se
+        # mélangeait visuellement avec l'icône). y avance donc d'abord pour
+        # l'image, puis le texte démarre après, quel que soit son alignement.
+        y = self.h - _FOOTER_TOP_MM
         if self._branding.footer_image:
             try:
-                self.image(self._branding.footer_image.path, x=self.l_margin, y=self.h - 22, h=_FOOTER_IMAGE_HEIGHT_MM)
+                self.image(self._branding.footer_image.path, x=self.l_margin, y=y, h=_FOOTER_IMAGE_HEIGHT_MM)
+                y += _FOOTER_IMAGE_HEIGHT_MM + 1
             except Exception:
                 pass  # image supprimée du disque ou illisible : on n'interrompt pas la génération
         if self._branding.footer_text:
-            self.set_y(-18)
+            self.set_y(y)
             footer_size = self._branding.footer_font_size or 8
             self.set_font("Helvetica", "", footer_size)
             r, g, b = _hex_to_rgb(self._branding.footer_color) if self._branding.footer_color else (90, 90, 90)
