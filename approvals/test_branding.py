@@ -15,6 +15,18 @@ from .models import BrandingLogo, CustomFont, DocumentBranding, Request, Request
 from .pdf_export import generate_request_summary_pdf
 
 
+def _tiny_png(name="logo.png"):
+    # Vrai PNG valide (pas juste l'en-tête magique) : pdf.image() le décode
+    # réellement (via Pillow) pour l'intégrer au PDF.
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (4, 4), color="blue").save(buffer, format="PNG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+
 def _valid_ttf_bytes():
     """Génère un TTF minimal mais réellement valide (fontTools, déjà une
     dépendance de fpdf2) — un fichier bidon ne suffit pas ici : le but est
@@ -261,6 +273,36 @@ class PdfExportBrandingTests(TestCase):
         pdf_bytes = generate_request_summary_pdf(self.req)
         self.assertIn(b"12.00 Tf", pdf_bytes)
         self.assertIn(b"1 0 0 rg", pdf_bytes)
+
+    def test_page_number_stays_above_a_long_footer_text(self):
+        """Retour client : un pied de page sur plusieurs lignes recouvrait le
+        numéro de page — le numéro doit rester à part, quelle que soit la
+        longueur du pied de page."""
+        long_footer = "<br>".join([f"Ligne {i} des mentions légales" for i in range(8)])
+        DocumentBranding.objects.create(request_type=self.request_type, footer_text=long_footer)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        page_match = re.search(rb"BT ([\d.]+) ([\d.]+) Td.*?\(Page 1/\) Tj", pdf_bytes)
+        self.assertIsNotNone(page_match, "numéro de page introuvable dans le flux PDF")
+        page_y = float(page_match.group(2))
+        # Coordonnées PDF : 0 = bas de page. Un numéro de page situé haut sur
+        # la page (donc au-dessus de tout pied de page, aussi long soit-il)
+        # doit avoir un y bien supérieur à la zone de pied de page (~40pt).
+        self.assertGreater(page_y, 700)
+
+    def test_footer_image_does_not_crash_generation(self):
+        branding = DocumentBranding.objects.create(request_type=self.request_type)
+        branding.footer_image.save("icon.png", _tiny_png(), save=True)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
+    def test_missing_footer_image_file_does_not_crash_generation(self):
+        branding = DocumentBranding.objects.create(request_type=self.request_type)
+        branding.footer_image.save("icon.png", _tiny_png(), save=True)
+        branding.footer_image.delete(save=False)  # le champ pointe vers un fichier disparu
+        branding.footer_image.name = "branding_footer/2026/01/disparu.png"
+        branding.save()
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_no_underline_by_default(self):
         pdf_bytes = generate_request_summary_pdf(self.req)

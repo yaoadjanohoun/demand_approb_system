@@ -230,6 +230,14 @@ class DocumentBranding(models.Model):
         max_length=7, blank=True, validators=[_HEX_COLOR_VALIDATOR],
         help_text="Couleur du pied de page (format #RRGGBB). Laisser vide pour un gris neutre.",
     )
+    footer_image = models.ImageField(
+        upload_to="branding_footer/%Y/%m/",
+        blank=True,
+        null=True,
+        validators=[FileExtensionValidator(["png", "jpg", "jpeg"])],
+        help_text="Image ou icône affichée en bas à gauche de chaque page (ex: sceau, "
+        "certification) — optionnel.",
+    )
     accent_color = models.CharField(
         max_length=7,
         blank=True,

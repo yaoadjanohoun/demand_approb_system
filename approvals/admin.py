@@ -376,12 +376,13 @@ class DocumentBrandingAdmin(NamedFieldWidgetMixin, ModelAdmin):
         (
             "En-tête / pied de page",
             {
-                "fields": ("header_text", "footer_text", "footer_font_size", "footer_color"),
+                "fields": ("header_text", "footer_text", "footer_font_size", "footer_color", "footer_image"),
                 "description": (
                     "Affichés sur le PDF résumé de chaque demande de ce type "
                     "(voir bouton \"Télécharger le PDF\" sur une demande) — les logos "
-                    "s'ajoutent séparément ci-dessous. Le pied de page suit aussi "
-                    "l'espacement choisi dans \"Typographie\"."
+                    "d'en-tête s'ajoutent séparément ci-dessous. Le pied de page suit aussi "
+                    "l'espacement choisi dans \"Typographie\". Le numéro de page est affiché "
+                    "séparément, en haut à droite, pour ne jamais chevaucher le pied de page."
                 ),
             },
         ),

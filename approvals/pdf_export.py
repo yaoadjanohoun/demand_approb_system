@@ -64,6 +64,7 @@ _TYPOGRAPHIC_REPLACEMENTS = {
 
 _LOGO_HEIGHT_MM = 14
 _LOGO_GAP_MM = 6
+_FOOTER_IMAGE_HEIGHT_MM = 10
 
 # Rendu automatique (voir _generate_auto_layout) : bleu-gris sobre pour les
 # titres de section et les filets, cohérent avec un document d'entreprise
@@ -254,6 +255,20 @@ class _BrandedPDF(FPDF):
         self._branding = branding
 
     def header(self):
+        # Numéro de page en haut à droite, pas dans le pied de page : un pied
+        # de page long (plusieurs lignes de mentions légales) le recouvrait
+        # sinon (retour client) — ici, jamais de contenu concurrent à cet
+        # endroit, quelle que soit la longueur du texte de pied de page.
+        self.set_font("Helvetica", "I", 7)
+        self.set_text_color(120, 120, 120)
+        self.set_xy(self.w - self.r_margin - 30, self.t_margin - 6)
+        self.cell(30, 5, f"Page {self.page_no()}/{{nb}}", align="R")
+        self.set_text_color(0, 0, 0)
+        # cell() laisse le curseur au bord droit de sa propre cellule — sans
+        # ce reset, le prochain multi_cell (titre du document) démarrerait de
+        # là et planterait ("Not enough horizontal space").
+        self.set_xy(self.l_margin, self.t_margin)
+
         if not self._branding:
             return
         logos = list(self._branding.logos.all())
@@ -266,13 +281,22 @@ class _BrandedPDF(FPDF):
                     continue  # logo supprimé du disque ou illisible : on n'interrompt pas la génération
                 x += _LOGO_HEIGHT_MM + _LOGO_GAP_MM
             self.set_y(self.t_margin + _LOGO_HEIGHT_MM + 2)
+        else:
+            self.set_y(self.t_margin)
         if self._branding.header_text:
             self.set_font("Helvetica", "", 9)
             self._write_html_no_page_break(_pdf_safe(_fix_html_alignment(self._branding.header_text)))
         self.ln(2)
 
     def footer(self):
-        if self._branding and self._branding.footer_text:
+        if not self._branding:
+            return
+        if self._branding.footer_image:
+            try:
+                self.image(self._branding.footer_image.path, x=self.l_margin, y=self.h - 22, h=_FOOTER_IMAGE_HEIGHT_MM)
+            except Exception:
+                pass  # image supprimée du disque ou illisible : on n'interrompt pas la génération
+        if self._branding.footer_text:
             self.set_y(-18)
             footer_size = self._branding.footer_font_size or 8
             self.set_font("Helvetica", "", footer_size)
@@ -280,12 +304,6 @@ class _BrandedPDF(FPDF):
             self.set_text_color(r, g, b)
             self._write_html_no_page_break(_pdf_safe(_fix_html_alignment(self._branding.footer_text)))
             self.set_text_color(0, 0, 0)
-
-        self.set_y(-10)
-        self.set_font("Helvetica", "I", 7)
-        self.set_text_color(120, 120, 120)
-        self.cell(0, 5, f"Page {self.page_no()}/{{nb}}", align="C")
-        self.set_text_color(0, 0, 0)
 
     def _write_html_no_page_break(self, html):
         """write_html() déclenche le saut de page automatique dès que la
