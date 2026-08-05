@@ -201,6 +201,14 @@ class RequestType(models.Model):
         "en ligne, et à l'approbateur lors de la révision — à titre de référence, les "
         "champs ci-dessus restent la source des données enregistrées.",
     )
+    requires_context_selection = models.BooleanField(
+        default=False,
+        help_text="Si activé, le demandeur doit choisir le département (et "
+        "éventuellement le site) concerné par SA demande — utilisé pour router "
+        "l'approbation, à la place du département/site de son propre profil. "
+        "À activer quand l'approbateur pertinent dépend du sujet de la demande "
+        "plutôt que de qui la fait (ex: achat pour un autre département).",
+    )
 
     def __str__(self):
         return self.name
@@ -489,6 +497,17 @@ class Request(models.Model):
         max_length=10, choices=Status.choices, default=Status.DRAFT
     )
     current_level = models.PositiveIntegerField(default=1)
+    # Renseignés par le demandeur à la soumission quand
+    # RequestType.requires_context_selection est actif — le moteur de routage
+    # (WorkflowEngine) les utilise à la place du département/site du profil du
+    # demandeur pour matcher les ApprovalRule et résoudre les approbateurs de
+    # type "role" (voir services.py). None = comportement historique (profil).
+    context_department = models.ForeignKey(
+        Department, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    context_site = models.ForeignKey(
+        Site, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     data = models.JSONField(default=dict, blank=True)
     snapshot_metadata = models.JSONField(default=dict, blank=True, null=True)
     submitted_at = models.DateTimeField(null=True, blank=True)

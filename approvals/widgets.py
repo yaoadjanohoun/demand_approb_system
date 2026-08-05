@@ -12,7 +12,7 @@ from django import forms
 from django.contrib.auth.models import Group, User
 from django.utils.safestring import mark_safe
 
-from .models import Department, Site
+from .models import Department, Role, Site
 
 FIELD_TYPE_CHOICES = [
     ("text", "Texte"),
@@ -496,6 +496,8 @@ APPROVER_TYPE_CHOICES = [
     ("user", "Utilisateur spécifique"),
     ("group", "Groupe (n'importe quel membre peut valider)"),
     ("manager", "Manager du demandeur"),
+    ("role", "Rôle métier + département (n'importe qui ayant ce rôle dans le "
+             "département concerné par la demande)"),
 ]
 
 
@@ -519,9 +521,9 @@ class ApproversConfigBuilderWidget(forms.Textarea):
     """Constructeur visuel pour ApprovalRule.approvers_config.
 
     Ne propose que les modes de résolution effectivement gérés par le moteur
-    de routage (user/group/manager) — "role" et "custom" existent dans le
-    schéma mais nécessitent un modèle d'organisation pas encore construit
-    (voir WorkflowEngine._resolve_approvers).
+    de routage (user/group/manager/role) — "custom" existe dans le schéma mais
+    nécessite un modèle d'organisation pas encore construit (voir
+    WorkflowEngine._resolve_approvers).
     """
 
     def __init__(self, request=None, attrs=None):
@@ -538,6 +540,7 @@ class ApproversConfigBuilderWidget(forms.Textarea):
             users_qs = users_qs.filter(profile__department_id=department_id)
         users = [(u.id, u.get_full_name() or u.username) for u in users_qs.order_by("username")]
         groups = [(g.id, g.name) for g in Group.objects.order_by("name")]
+        roles = [(r.id, r.name) for r in Role.objects.order_by("name")]
 
         # Même bug/fix que CriteriaBuilderWidget ci-dessus (widget affiché dans
         # le même inline ApprovalRule répétable) : initialisation extraite dans
@@ -562,6 +565,15 @@ class ApproversConfigBuilderWidget(forms.Textarea):
     <select class="acb-fallback"></select>
   </div>
 
+  <div class="acb-field acb-field-role" style="margin-top:8px; display:none;">
+    <label style="display:block; font-weight:600; margin-bottom:4px;">Rôle</label>
+    <select class="acb-role"></select>
+    <p style="margin:4px 0 0; font-size:0.85em; color:#666;">
+      Le département utilisé est celui choisi par le demandeur (ou son propre département,
+      si le type de demande n'exige pas ce choix) — pas besoin de le préciser ici.
+    </p>
+  </div>
+
   <div style="display:none;">{textarea_html}</div>
 </div>
 <script>
@@ -579,12 +591,14 @@ class ApproversConfigBuilderWidget(forms.Textarea):
       const TYPE_OPTIONS = window.__acbTypeOptions;
       const USERS = window.__acbUsers;
       const GROUPS = window.__acbGroups;
+      const ROLES = window.__acbRoles;
       const textarea = document.getElementById(container.dataset.textareaId);
 
       const typeSelect = container.querySelector(".acb-type");
       const userSelect = container.querySelector(".acb-user");
       const groupSelect = container.querySelector(".acb-group");
       const fallbackSelect = container.querySelector(".acb-fallback");
+      const roleSelect = container.querySelector(".acb-role");
 
       function fillOptions(select, options, selectedValue, allowBlank) {{
         select.innerHTML = "";
@@ -610,12 +624,14 @@ class ApproversConfigBuilderWidget(forms.Textarea):
       fillOptions(userSelect, USERS, initial.user_id, true);
       fillOptions(groupSelect, GROUPS, initial.group_id, true);
       fillOptions(fallbackSelect, USERS, initial.fallback_user_id, true);
+      fillOptions(roleSelect, ROLES, initial.role_id, true);
 
       function updateVisibility() {{
         const type = typeSelect.value;
         container.querySelector(".acb-field-user").style.display = type === "user" ? "block" : "none";
         container.querySelector(".acb-field-group").style.display = type === "group" ? "block" : "none";
         container.querySelector(".acb-field-manager").style.display = type === "manager" ? "block" : "none";
+        container.querySelector(".acb-field-role").style.display = type === "role" ? "block" : "none";
       }}
       updateVisibility();
       typeSelect.addEventListener("change", updateVisibility);
@@ -629,6 +645,8 @@ class ApproversConfigBuilderWidget(forms.Textarea):
           config.group_id = parseInt(groupSelect.value, 10);
         }} else if (type === "manager" && fallbackSelect.value) {{
           config.fallback_user_id = parseInt(fallbackSelect.value, 10);
+        }} else if (type === "role" && roleSelect.value) {{
+          config.role_id = parseInt(roleSelect.value, 10);
         }}
         textarea.value = JSON.stringify(config);
       }}
@@ -647,6 +665,7 @@ class ApproversConfigBuilderWidget(forms.Textarea):
   window.__acbTypeOptions = {json.dumps(APPROVER_TYPE_CHOICES)};
   window.__acbUsers = {json.dumps(users)};
   window.__acbGroups = {json.dumps(groups)};
+  window.__acbRoles = {json.dumps(roles)};
 
   window.__acbBuilderInit(document.currentScript.previousElementSibling);
 }})();

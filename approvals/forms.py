@@ -4,7 +4,7 @@ import datetime
 from django import forms
 from django.contrib.auth import get_user_model
 
-from .models import UserProfile
+from .models import Department, Site, UserProfile
 from .validators import validate_person_name
 
 User = get_user_model()
@@ -14,6 +14,21 @@ class ProfilePhotoForm(forms.ModelForm):
     class Meta:
         model = UserProfile
         fields = ["photo"]
+
+
+class RequestContextForm(forms.Form):
+    """Département/site concerné par la demande, distinct du profil du
+    demandeur — affiché uniquement quand RequestType.requires_context_selection
+    est actif (voir WorkflowEngine._routing_department_id/_routing_site_id)."""
+
+    context_department = forms.ModelChoiceField(
+        queryset=Department.objects.order_by("name"), label="Département concerné",
+        empty_label="— Choisir —",
+    )
+    context_site = forms.ModelChoiceField(
+        queryset=Site.objects.order_by("name"), label="Site concerné",
+        required=False, empty_label="— Non applicable —",
+    )
 
 
 class PersonalInfoForm(forms.ModelForm):

@@ -6,7 +6,9 @@ from django.test import TestCase
 from django.utils import timezone
 
 from . import reports as reports_module
-from .models import ApprovalLog, ApprovalRule, Delegation, Department, Request, RequestType, Site, UserProfile
+from .models import (
+    ApprovalLog, ApprovalRule, Delegation, Department, Request, RequestType, Role, Site, UserProfile,
+)
 from .services import RoutingError, WorkflowEngine
 
 
@@ -599,3 +601,87 @@ class ReportsTests(TestCase):
         self.assertIn("text/csv", response["Content-Type"])
         self.assertIn("employee1", content)
         self.assertIn("EXPENSE", content)
+
+
+class RoutingContextAndRoleTests(TestCase):
+    """Request.context_department/context_site (RequestType.
+    requires_context_selection) et approvers_config.type == "role" — le
+    demandeur peut faire une demande pour un autre département que le sien,
+    et un rôle métier + ce département peuvent servir à router l'approbation."""
+
+    def setUp(self):
+        self.it_department = Department.objects.create(name="IT")
+        self.sales_department = Department.objects.create(name="Ventes")
+        self.buyer_role = Role.objects.create(name="Responsable Achats")
+
+        self.employee = User.objects.create_user("employee_it", password="x")
+        UserProfile.objects.create(user=self.employee, department=self.it_department)
+
+        self.sales_buyer = User.objects.create_user("buyer_sales", password="x")
+        UserProfile.objects.create(
+            user=self.sales_buyer, department=self.sales_department, role=self.buyer_role,
+        )
+        self.it_buyer = User.objects.create_user("buyer_it", password="x")
+        UserProfile.objects.create(
+            user=self.it_buyer, department=self.it_department, role=self.buyer_role,
+        )
+
+        self.request_type = RequestType.objects.create(
+            name="Achat", code="PURCHASE_CTX",
+            form_schema={"fields": []}, requires_context_selection=True,
+        )
+
+    def make_request(self, context_department=None):
+        return Request.objects.create(
+            request_type=self.request_type, requester=self.employee, data={},
+            context_department=context_department,
+        )
+
+    def test_context_department_overrides_requester_profile_for_criteria_matching(self):
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1,
+            criteria={"department_ids": [self.sales_department.id]},
+            approvers_config={"type": "user", "user_id": self.sales_buyer.id},
+        )
+        request = self.make_request(context_department=self.sales_department)
+        WorkflowEngine(request).submit(actor=self.employee)
+        request.refresh_from_db()
+        entry = request.snapshot_metadata["workflow_snapshot"][0]
+        self.assertEqual(entry["approver_ids"], [self.sales_buyer.id])
+
+    def test_without_context_selection_falls_back_to_requester_profile(self):
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1,
+            criteria={"department_ids": [self.it_department.id]},
+            approvers_config={"type": "user", "user_id": self.it_buyer.id},
+        )
+        request = self.make_request(context_department=None)
+        WorkflowEngine(request).submit(actor=self.employee)
+        request.refresh_from_db()
+        entry = request.snapshot_metadata["workflow_snapshot"][0]
+        self.assertEqual(entry["approver_ids"], [self.it_buyer.id])
+
+    def test_role_approver_type_resolves_to_users_with_role_in_context_department(self):
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={},
+            approvers_config={"type": "role", "role_id": self.buyer_role.id},
+        )
+        request = self.make_request(context_department=self.sales_department)
+        WorkflowEngine(request).submit(actor=self.employee)
+        request.refresh_from_db()
+        entry = request.snapshot_metadata["workflow_snapshot"][0]
+        self.assertEqual(entry["approver_ids"], [self.sales_buyer.id])
+        self.assertNotIn(self.it_buyer.id, entry["approver_ids"])
+
+    def test_role_approver_type_without_any_department_blocks_submission(self):
+        no_dept_employee = User.objects.create_user("employee_no_dept", password="x")
+        UserProfile.objects.create(user=no_dept_employee)
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1, criteria={},
+            approvers_config={"type": "role", "role_id": self.buyer_role.id},
+        )
+        request = Request.objects.create(
+            request_type=self.request_type, requester=no_dept_employee, data={},
+        )
+        with self.assertRaises(RoutingError):
+            WorkflowEngine(request).submit(actor=no_dept_employee)

@@ -21,6 +21,24 @@
         {% csrf_token %}
         {{ form.non_field_errors }}
 
+        {% if context_form %}
+            <div class="form-fields" style="margin-bottom:1rem; padding-bottom:0.75rem; border-bottom:1px solid #e5e8ec;">
+                <p class="card-note" style="margin-top:0;">
+                    Le département (et le site, si pertinent) que cette demande concerne — sert à
+                    déterminer qui doit l'approuver, indépendamment de ton propre département.
+                </p>
+                {% for field in context_form %}
+                    <div class="form-field">
+                        <label for="{{ field.id_for_label }}">
+                            {{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}
+                        </label>
+                        {{ field }}
+                        {{ field.errors }}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
         <div class="form-fields">
             {% for group in form|group_fields:request_type %}
                 {% if group.section %}<h3 style="margin:1rem 0 0.4rem;">{{ group.section }}</h3>{% endif %}

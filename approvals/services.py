@@ -11,7 +11,7 @@ from django.contrib.auth.models import Group
 from django.utils import timezone
 
 from . import notifications
-from .models import ApprovalLog, ApprovalRule, Delegation, Request
+from .models import ApprovalLog, ApprovalRule, Delegation, Request, UserProfile
 
 
 class RoutingError(Exception):
@@ -128,11 +128,11 @@ class WorkflowEngine:
                 return False
 
         if "department_ids" in criteria:
-            if not profile or profile.department_id not in criteria["department_ids"]:
+            if self._routing_department_id() not in criteria["department_ids"]:
                 return False
 
         if "site_id" in criteria:
-            if not profile or profile.site_id != criteria["site_id"]:
+            if self._routing_site_id() != criteria["site_id"]:
                 return False
 
         if "country_code" in criteria:
@@ -140,6 +140,23 @@ class WorkflowEngine:
                 return False
 
         return True
+
+    def _routing_department_id(self):
+        """Département utilisé pour router la demande : celui choisi explicitement
+        par le demandeur (Request.context_department, quand RequestType.
+        requires_context_selection est actif) prime sur celui de son propre
+        profil — une demande peut concerner un autre département que celui du
+        demandeur (ex: achat pour le compte d'une autre équipe)."""
+        if self.request.context_department_id:
+            return self.request.context_department_id
+        profile = getattr(self.request.requester, "profile", None)
+        return profile.department_id if profile else None
+
+    def _routing_site_id(self):
+        if self.request.context_site_id:
+            return self.request.context_site_id
+        profile = getattr(self.request.requester, "profile", None)
+        return profile.site_id if profile else None
 
     def missing_manager_candidate(self):
         """Vrai si la demande ne peut pas être soumise précisément parce
@@ -208,9 +225,25 @@ class WorkflowEngine:
                 return [config["fallback_user_id"]]
             return []
 
+        if approver_type == "role":
+            role_id = config.get("role_id")
+            department_id = self._routing_department_id()
+            if not role_id or not department_id:
+                # Sans département de rattachement (ni contexte choisi, ni profil
+                # renseigné), "n'importe qui avec ce rôle" serait trop large pour
+                # avoir un sens métier — mieux vaut bloquer explicitement (voir
+                # submit()) que d'assigner l'approbation à des personnes non
+                # concernées par la demande.
+                return []
+            return list(
+                UserProfile.objects.filter(
+                    role_id=role_id, department_id=department_id, user__is_active=True,
+                ).values_list("user_id", flat=True)
+            )
+
         raise RoutingError(
             f"Type d'approbateur '{approver_type}' non pris en charge pour le moment "
-            "(role/custom nécessitent un modèle d'organisation, phase future)."
+            "('custom' nécessite un modèle d'organisation, phase future)."
         )
 
     # ------------------------------------------------------------------

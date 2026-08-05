@@ -20,7 +20,10 @@ from django.utils import timezone
 from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from . import reports as reports_module
-from .forms import PersonalInfoForm, ProfilePhotoForm, build_dynamic_form, grouped_labeled_data, labeled_data
+from .forms import (
+    PersonalInfoForm, ProfilePhotoForm, RequestContextForm, build_dynamic_form,
+    grouped_labeled_data, labeled_data,
+)
 from .models import (
     BrandingLogo, CustomFont, DOCUMENT_TEMPLATE_PAGE_HEIGHT_MM, DOCUMENT_TEMPLATE_PAGE_WIDTH_MM,
     DocumentTemplate, Request, RequestAttachment, RequestType, UserProfile,
@@ -220,52 +223,58 @@ def _validate_chosen_approver(chosen_id):
 @login_required
 def request_create(request, type_id):
     request_type = get_object_or_404(RequestType, pk=type_id, is_active=True)
+    needs_context = request_type.requires_context_selection
 
     if request.method == "POST":
         action = request.POST.get("action", "submit")
         form = build_dynamic_form(request_type, data=request.POST)
+        context_form = RequestContextForm(request.POST) if needs_context else None
         attachment_files = request.FILES.getlist("attachments")
 
         if action == "draft":
             for field in form.fields.values():
                 field.required = False
-            if form.is_valid():
+            if context_form:
+                context_form.fields["context_department"].required = False
+            if form.is_valid() and (not context_form or context_form.is_valid()):
                 new_request = Request(
                     request_type=request_type,
                     requester=request.user,
                     status=Request.Status.DRAFT,
                     data=_serialize_form_data(form),
                 )
+                _apply_context_selection(new_request, context_form)
                 try:
                     attachments = _build_attachments(new_request, attachment_files, request.user)
                 except ValidationError as exc:
                     messages.error(request, " ".join(exc.messages))
                     return render(
                         request, "approvals/request_form.html",
-                        {"request_type": request_type, "form": form},
+                        {"request_type": request_type, "form": form, "context_form": context_form},
                     )
                 new_request.save()
                 _save_attachments(attachments)
                 messages.success(request, "Brouillon enregistré.")
                 return redirect("approvals:request_edit", pk=new_request.pk)
-        elif form.is_valid():
+        elif form.is_valid() and (not context_form or context_form.is_valid()):
             new_request = Request(
                 request_type=request_type,
                 requester=request.user,
                 data=_serialize_form_data(form),
             )
+            _apply_context_selection(new_request, context_form)
             try:
                 attachments = _build_attachments(new_request, attachment_files, request.user)
             except ValidationError as exc:
                 messages.error(request, " ".join(exc.messages))
                 return render(
                     request, "approvals/request_form.html",
-                    {"request_type": request_type, "form": form},
+                    {"request_type": request_type, "form": form, "context_form": context_form},
                 )
             engine = WorkflowEngine(new_request)
             success, picker_context = _submit_with_manager_fallback(request, engine)
             if not success:
-                context = {"request_type": request_type, "form": form}
+                context = {"request_type": request_type, "form": form, "context_form": context_form}
                 if picker_context:
                     context.update(picker_context)
                 return render(request, "approvals/request_form.html", context)
@@ -274,11 +283,21 @@ def request_create(request, type_id):
             return redirect("approvals:request_detail", pk=new_request.pk)
     else:
         form = build_dynamic_form(request_type)
+        context_form = RequestContextForm() if needs_context else None
 
     return render(
         request, "approvals/request_form.html",
-        {"request_type": request_type, "form": form},
+        {"request_type": request_type, "form": form, "context_form": context_form},
     )
+
+
+def _apply_context_selection(req, context_form):
+    """Reporte le département/site choisi (RequestContextForm) sur la demande
+    avant sa sauvegarde — no-op si le type de demande n'exige pas ce choix."""
+    if not context_form:
+        return
+    req.context_department = context_form.cleaned_data.get("context_department")
+    req.context_site = context_form.cleaned_data.get("context_site")
 
 
 @login_required
@@ -293,6 +312,7 @@ def request_edit(request, pk):
         return redirect("approvals:request_detail", pk=pk)
 
     is_draft = req.status == Request.Status.DRAFT
+    needs_context = req.request_type.requires_context_selection
     template_context = {
         "request_type": req.request_type, "editing": True, "is_draft": is_draft,
         "existing_attachments": req.attachments.all(),
@@ -301,34 +321,45 @@ def request_edit(request, pk):
     if request.method == "POST":
         action = request.POST.get("action", "submit")
         form = build_dynamic_form(req.request_type, data=request.POST)
+        context_form = RequestContextForm(request.POST) if needs_context else None
         attachment_files = request.FILES.getlist("attachments")
 
         if is_draft and action == "draft":
             for field in form.fields.values():
                 field.required = False
-            if form.is_valid():
+            if context_form:
+                context_form.fields["context_department"].required = False
+            if form.is_valid() and (not context_form or context_form.is_valid()):
                 try:
                     attachments = _build_attachments(req, attachment_files, request.user)
                 except ValidationError as exc:
                     messages.error(request, " ".join(exc.messages))
-                    return render(request, "approvals/request_form.html", {**template_context, "form": form})
+                    return render(
+                        request, "approvals/request_form.html",
+                        {**template_context, "form": form, "context_form": context_form},
+                    )
                 req.data = _serialize_form_data(form)
+                _apply_context_selection(req, context_form)
                 req.save()
                 _save_attachments(attachments)
                 messages.success(request, "Brouillon enregistré.")
                 return redirect("approvals:request_edit", pk=pk)
-        elif form.is_valid():
+        elif form.is_valid() and (not context_form or context_form.is_valid()):
             try:
                 attachments = _build_attachments(req, attachment_files, request.user)
             except ValidationError as exc:
                 messages.error(request, " ".join(exc.messages))
-                return render(request, "approvals/request_form.html", {**template_context, "form": form})
+                return render(
+                    request, "approvals/request_form.html",
+                    {**template_context, "form": form, "context_form": context_form},
+                )
             req.data = _serialize_form_data(form)
+            _apply_context_selection(req, context_form)
             req.save()
             engine = WorkflowEngine(req)
             success, picker_context = _submit_with_manager_fallback(request, engine, resubmit=not is_draft)
             if not success:
-                context = {**template_context, "form": form}
+                context = {**template_context, "form": form, "context_form": context_form}
                 if picker_context:
                     context.update(picker_context)
                 return render(request, "approvals/request_form.html", context)
@@ -339,8 +370,16 @@ def request_edit(request, pk):
             return redirect("approvals:request_detail", pk=pk)
     else:
         form = build_dynamic_form(req.request_type, initial=req.data)
+        context_form = None
+        if needs_context:
+            initial = {}
+            if req.context_department_id:
+                initial["context_department"] = req.context_department_id
+            if req.context_site_id:
+                initial["context_site"] = req.context_site_id
+            context_form = RequestContextForm(initial=initial)
 
-    return render(request, "approvals/request_form.html", {**template_context, "form": form})
+    return render(request, "approvals/request_form.html", {**template_context, "form": form, "context_form": context_form})
 
 
 @login_required

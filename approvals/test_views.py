@@ -16,7 +16,7 @@ from django.contrib.auth.models import User
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
-from .models import ApprovalRule, Request, RequestAttachment, RequestType, UserProfile
+from .models import ApprovalRule, Department, Request, RequestAttachment, RequestType, UserProfile
 
 
 class DecisionConfirmationTests(TestCase):
@@ -406,6 +406,50 @@ class DraftRequestTests(TestCase):
         )
         response = self.client.get(f"/{req.pk}/edit/")
         self.assertEqual(response.status_code, 403)
+
+
+class RequestContextSelectionTests(TestCase):
+    """RequestType.requires_context_selection : le demandeur choisit le
+    département (et le site) concerné par sa demande, distinct de son propre
+    profil — utilisé par WorkflowEngine pour router l'approbation."""
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee_ctx", password="x")
+        self.approver = User.objects.create_user("approver_ctx", password="x")
+        self.own_department = Department.objects.create(name="IT")
+        self.other_department = Department.objects.create(name="Ventes")
+        UserProfile.objects.create(user=self.employee, department=self.own_department)
+        self.request_type = RequestType.objects.create(
+            name="Achat", code="PURCHASE_CTX", form_schema={"fields": []},
+            requires_context_selection=True,
+        )
+        ApprovalRule.objects.create(
+            request_type=self.request_type, level=1,
+            criteria={"department_ids": [self.other_department.id]},
+            approvers_config={"type": "user", "user_id": self.approver.id},
+        )
+        self.client.login(username="employee_ctx", password="x")
+
+    def test_context_field_is_shown_on_the_form(self):
+        response = self.client.get(f"/new/{self.request_type.id}/")
+        self.assertContains(response, "Département concerné")
+
+    def test_submitting_without_choosing_a_department_fails(self):
+        response = self.client.post(f"/new/{self.request_type.id}/", {"action": "submit"})
+        self.assertEqual(response.status_code, 200)  # re-rendu avec l'erreur, pas de redirection
+        self.assertFalse(Request.objects.filter(requester=self.employee).exists())
+
+    def test_chosen_department_is_saved_and_used_for_routing(self):
+        response = self.client.post(
+            f"/new/{self.request_type.id}/",
+            {"action": "submit", "context_department": self.other_department.id},
+        )
+        self.assertEqual(response.status_code, 302)
+        req = Request.objects.get(requester=self.employee)
+        self.assertEqual(req.context_department_id, self.other_department.id)
+        self.assertEqual(req.status, Request.Status.PENDING)
+        entry = req.snapshot_metadata["workflow_snapshot"][0]
+        self.assertEqual(entry["approver_ids"], [self.approver.id])
 
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())

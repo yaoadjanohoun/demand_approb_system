@@ -347,6 +347,20 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
             "Options avancées",
             {"fields": ("resume_on_resubmit", "is_sensitive", "default_currency")},
         ),
+        (
+            "Routage de l'approbation",
+            {
+                "fields": ("requires_context_selection",),
+                "description": (
+                    "À activer quand l'approbateur pertinent dépend du sujet de la demande "
+                    "plutôt que du département du demandeur (ex: achat pour le compte d'une "
+                    "autre équipe) — le demandeur choisit alors explicitement le département "
+                    "(et le site) concerné, utilisé à la place de son propre profil pour "
+                    "déterminer les règles d'approbation applicables (onglet ApprovalRule "
+                    "ci-dessous)."
+                ),
+            },
+        ),
     )
 
     def save_formset(self, request, form, formset, change):

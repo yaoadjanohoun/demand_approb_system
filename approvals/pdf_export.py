@@ -473,6 +473,7 @@ def _generate_auto_layout(req):
     _write_line(pdf, req.request_type.name, height=10 * scale, safe=is_builtin)
     pdf.ln(2 * scale)
 
+    requester_profile = getattr(req.requester, "profile", None)
     meta_rows = [
         {"label": "Reference", "value": req.reference},
         {"label": "Statut", "value": req.get_status_display(),
@@ -484,9 +485,22 @@ def _generate_auto_layout(req):
          # site, America/Toronto) — contrairement aux templates HTML, qui la
          # convertissent automatiquement.
          "value": timezone.localtime(req.submitted_at).strftime("%d/%m/%Y %H:%M") if req.submitted_at else "-"},
+        {"label": "Département", "value": requester_profile.department.name if requester_profile and requester_profile.department else "-"},
+        {"label": "Site", "value": requester_profile.site.name if requester_profile and requester_profile.site else "-"},
+        {"label": "Rôle", "value": requester_profile.role.name if requester_profile and requester_profile.role else "-"},
     ]
     _render_two_col_row(pdf, meta_rows[0], meta_rows[1], col_width, accent_rgb, style)
     _render_two_col_row(pdf, meta_rows[2], meta_rows[3], col_width, accent_rgb, style)
+    _render_two_col_row(pdf, meta_rows[4], meta_rows[5], col_width, accent_rgb, style)
+    _render_two_col_row(pdf, meta_rows[6], None, col_width, accent_rgb, style)
+    pdf.ln(2 * scale)
+
+    pdf.set_font(family, style["bold_style"], max(style["size"] - 1, 6))
+    _write_line(pdf, "SIGNATURE DU DEMANDEUR", height=5 * scale, safe=is_builtin)
+    pdf.set_font(family, "", style["size"])
+    requester_signature_path = requester_profile.signature.path if requester_profile and requester_profile.signature else None
+    if not _render_signature_image(pdf, requester_signature_path):
+        _write_line(pdf, "(non fournie)", height=6 * scale, safe=is_builtin)
     pdf.ln(2 * scale)
 
     pdf.set_draw_color(*accent_rgb)
@@ -513,6 +527,22 @@ def _generate_auto_layout(req):
     return bytes(pdf.output())
 
 
+def _render_signature_image(pdf, signature_path, height_mm=_APPROVAL_SIGNATURE_HEIGHT_MM):
+    """Dessine une signature (dessinée une fois dans le profil — voir
+    UserProfile.signature) à la position courante et avance le curseur.
+    Retourne False (sans rien dessiner) si absente ou illisible — le fichier
+    peut avoir été supprimé du disque entre-temps, ce n'est pas une raison
+    d'interrompre la génération du PDF."""
+    if not signature_path:
+        return False
+    try:
+        pdf.image(signature_path, x=pdf.l_margin, y=pdf.get_y() + 1, h=height_mm)
+        pdf.set_y(pdf.get_y() + height_mm + 1)
+        return True
+    except Exception:
+        return False
+
+
 def _render_approvals_section(pdf, req, family, is_builtin, scale, accent_rgb, style):
     """Section finale listant qui a approuvé, quand, et sa signature (dessinée
     une fois dans le profil — voir UserProfile.signature) — un log ApprovalLog
@@ -537,23 +567,30 @@ def _render_approvals_section(pdf, req, family, is_builtin, scale, accent_rgb, s
     for log in approval_logs:
         level = (log.context or {}).get("level")
         label = f"Niveau {level}" if level else "Approbation"
-        approver_name, signature_path = "-", None
+        approver_name, signature_path, profile = "-", None, None
         if log.actor:
             approver_name = log.actor.get_full_name() or log.actor.username
             profile = getattr(log.actor, "profile", None)
             if profile and profile.signature:
                 signature_path = profile.signature.path
         approved_at = timezone.localtime(log.timestamp).strftime("%d/%m/%Y %H:%M")
+        # Même logique que les métadonnées du demandeur en haut du document
+        # (retour client) : département/site/rôle de l'approbateur, tels que
+        # renseignés sur son propre profil.
+        origin_parts = [
+            part.name for part in (
+                profile.department if profile else None,
+                profile.site if profile else None,
+                profile.role if profile else None,
+            ) if part
+        ]
+        origin_line = " · ".join(origin_parts) if origin_parts else "-"
 
         pdf.set_font(family, style["bold_style"], style["size"])
         _write_line(pdf, f"{label} — {approver_name}", height=6 * scale, safe=is_builtin)
         pdf.set_font(family, "", max(style["size"] - 1, 6))
+        _write_line(pdf, origin_line, height=5 * scale, safe=is_builtin)
         _write_line(pdf, f"Approuvé le {approved_at}", height=5 * scale, safe=is_builtin)
 
-        if signature_path:
-            try:
-                pdf.image(signature_path, x=pdf.l_margin, y=pdf.get_y() + 1, h=_APPROVAL_SIGNATURE_HEIGHT_MM)
-                pdf.set_y(pdf.get_y() + _APPROVAL_SIGNATURE_HEIGHT_MM + 1)
-            except Exception:
-                pass  # signature supprimée du disque ou illisible : le nom/la date restent affichés
+        _render_signature_image(pdf, signature_path)
         pdf.ln(4 * scale)

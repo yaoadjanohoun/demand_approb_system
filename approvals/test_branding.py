@@ -11,7 +11,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 
 from .forms import grouped_form_fields, grouped_labeled_data, build_dynamic_form
-from .models import ApprovalLog, BrandingLogo, CustomFont, DocumentBranding, Request, RequestType, UserProfile
+from .models import (
+    ApprovalLog, BrandingLogo, CustomFont, Department, DocumentBranding, Request, RequestType, Role,
+    Site, UserProfile,
+)
 from .pdf_export import generate_request_summary_pdf
 
 
@@ -198,6 +201,42 @@ class PdfExportBrandingTests(TestCase):
         self.assertIn(b"Demandeur", pdf_bytes)
         self.assertIn(b"Rapport", pdf_bytes)
 
+    def test_pdf_shows_requester_department_site_and_role(self):
+        department = Department.objects.create(name="Ventes")
+        site = Site.objects.create(name="Lyon")
+        role = Role.objects.create(name="Chargé de compte")
+        UserProfile.objects.create(user=self.employee, department=department, site=site, role=role)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"Ventes", pdf_bytes)
+        self.assertIn(b"Lyon", pdf_bytes)
+        self.assertIn(b"Charg", pdf_bytes)
+
+    def test_pdf_shows_dash_for_department_site_role_when_profile_missing(self):
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
+    def test_pdf_shows_placeholder_when_requester_has_no_signature(self):
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"SIGNATURE DU DEMANDEUR", pdf_bytes)
+        self.assertIn(rb"\(non fournie\)", pdf_bytes)
+
+    def test_pdf_includes_requester_signature_image_when_profile_has_one(self):
+        profile, _ = UserProfile.objects.get_or_create(user=self.employee)
+        profile.signature.save("signature.png", _tiny_png(), save=True)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"SIGNATURE DU DEMANDEUR", pdf_bytes)
+        self.assertNotIn(rb"\(non fournie\)", pdf_bytes)
+        self.assertIn(b"/Image", pdf_bytes)
+
+    def test_missing_requester_signature_file_does_not_crash_generation(self):
+        profile, _ = UserProfile.objects.get_or_create(user=self.employee)
+        profile.signature.save("signature.png", _tiny_png(), save=True)
+        profile.signature.delete(save=False)
+        profile.signature.name = "signatures/disparu.png"
+        profile.save()
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+
     def test_footer_style_center_alignment_is_respected(self):
         """RichTextWidget produit <div style="text-align: center;"> via
         execCommand du navigateur — fpdf2.write_html() ignore silencieusement
@@ -349,6 +388,22 @@ class ApprovalSectionPdfTests(TestCase):
     def test_no_approval_section_when_never_approved(self):
         pdf_bytes = generate_request_summary_pdf(self.req)
         self.assertNotIn(b"Approbations", pdf_bytes)
+
+    def test_approval_section_shows_approver_department_site_and_role(self):
+        department = Department.objects.create(name="Ventes")
+        site = Site.objects.create(name="Lyon")
+        role = Role.objects.create(name="Comptable")
+        UserProfile.objects.create(user=self.approver, department=department, site=site, role=role)
+        self._approve(level=1)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"Ventes", pdf_bytes)
+        self.assertIn(b"Lyon", pdf_bytes)
+        self.assertIn(b"Comptable", pdf_bytes)
+
+    def test_approval_section_shows_dash_when_approver_has_no_profile(self):
+        self._approve(level=1)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
     def test_approval_section_shows_approver_name_and_level(self):
         self._approve(level=1)
