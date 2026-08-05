@@ -162,13 +162,17 @@ def _generate_from_template(req, template):
     logos_by_id = {logo.id: logo for logo in BrandingLogo.objects.filter(id__in=_logo_ids(template))}
 
     for obj in template.canvas_json.get("objects", []):
+        # Fabric.js 6 sérialise le type en "Textbox"/"Image" (majuscule) —
+        # comparaison insensible à la casse pour ne pas dépendre d'une
+        # version précise de Fabric.js.
+        obj_type = (obj.get("type") or "").lower()
         data = obj.get("data") or {}
         x_mm = (obj.get("left", 0) or 0) / _TEMPLATE_PX_PER_MM
         y_mm = (obj.get("top", 0) or 0) / _TEMPLATE_PX_PER_MM
         scale_x = obj.get("scaleX", 1) or 1
         scale_y = obj.get("scaleY", 1) or 1
 
-        if obj.get("type") == "textbox":
+        if obj_type == "textbox":
             field_name = data.get("field")
             text = values_by_field_name.get(field_name, "") if field_name else obj.get("text", "")
 
@@ -188,7 +192,7 @@ def _generate_from_template(req, template):
             pdf.set_xy(x_mm, y_mm)
             pdf.multi_cell(width_mm, size_pt / 2.5, text, align=align)
 
-        elif obj.get("type") == "image" and data.get("logoId") in logos_by_id:
+        elif obj_type == "image" and data.get("logoId") in logos_by_id:
             logo = logos_by_id[data["logoId"]]
             width_mm = (obj.get("width", 0) * scale_x) / _TEMPLATE_PX_PER_MM
             height_mm = (obj.get("height", 0) * scale_y) / _TEMPLATE_PX_PER_MM

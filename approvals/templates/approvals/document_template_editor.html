@@ -89,6 +89,14 @@
     </div>
 </div>
 
+{% comment %}
+json_script échappe correctement et sérialise en JSON valide (true/false/null,
+guillemets doubles) — insérer le dict directement, sans ce filtre, produisait la
+représentation Python du dict (majuscules True/False/None), invalide en JS, ce
+qui faisait planter tout le script dès qu'une mise en page était enregistrée.
+{% endcomment %}
+{{ template.canvas_json|json_script:"dte-initial-json" }}
+
 <script src="{% static 'approvals/vendor/fabric.min.js' %}"></script>
 <script>
 (function() {
@@ -99,7 +107,7 @@
 
     var canvas = new fabric.Canvas("dte-canvas", { backgroundColor: "#ffffff" });
 
-    var initialJson = {{ template.canvas_json|default:"{}"|safe }};
+    var initialJson = JSON.parse(document.getElementById("dte-initial-json").textContent);
     if (initialJson && initialJson.objects && initialJson.objects.length) {
         canvas.loadFromJSON(initialJson, function() { canvas.renderAll(); });
     }
@@ -189,7 +197,11 @@
     }
 
     document.getElementById("dte-save-form").addEventListener("submit", function() {
-        document.getElementById("dte-canvas-json").value = JSON.stringify(canvas.toJSON(["data"]));
+        // canvas.toJSON(propertiesToInclude) ignore cet argument dans cette
+        // version de Fabric.js (le "data" — la liaison à un champ du
+        // formulaire — disparaissait silencieusement à l'enregistrement).
+        // canvas.toObject(propertiesToInclude) le respecte correctement.
+        document.getElementById("dte-canvas-json").value = JSON.stringify(canvas.toObject(["data"]));
     });
 })();
 </script>

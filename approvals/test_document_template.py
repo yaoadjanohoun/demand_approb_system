@@ -90,7 +90,7 @@ class TemplatePdfRenderingTests(TestCase):
         DocumentTemplate.objects.create(
             request_type=self.request_type,
             canvas_json={"objects": [{
-                "type": "textbox", "text": "{{departement}}", "left": 30, "top": 30,
+                "type": "Textbox", "text": "{{departement}}", "left": 30, "top": 30,
                 "width": 150, "fontSize": 14, "fill": "#000000",
                 "data": {"field": "departement"},
             }]},
@@ -104,7 +104,7 @@ class TemplatePdfRenderingTests(TestCase):
         DocumentTemplate.objects.create(
             request_type=self.request_type,
             canvas_json={"objects": [{
-                "type": "textbox", "text": "Texte fixe", "left": 30, "top": 30,
+                "type": "Textbox", "text": "Texte fixe", "left": 30, "top": 30,
                 "width": 150, "fontSize": 14, "fill": "#000000", "data": {},
             }]},
         )
@@ -127,7 +127,7 @@ class TemplatePdfRenderingTests(TestCase):
         DocumentTemplate.objects.create(
             request_type=self.request_type,
             canvas_json={"objects": [{
-                "type": "image", "left": 10, "top": 10, "width": 40, "height": 40,
+                "type": "Image", "left": 10, "top": 10, "width": 40, "height": 40,
                 "data": {"logoId": logo.id},
             }]},
         )
@@ -138,7 +138,7 @@ class TemplatePdfRenderingTests(TestCase):
         DocumentTemplate.objects.create(
             request_type=self.request_type,
             canvas_json={"objects": [{
-                "type": "image", "left": 10, "top": 10, "width": 40, "height": 40,
+                "type": "Image", "left": 10, "top": 10, "width": 40, "height": 40,
                 "data": {"logoId": 999999},
             }]},
         )
@@ -150,7 +150,7 @@ class TemplatePdfRenderingTests(TestCase):
         DocumentTemplate.objects.create(
             request_type=self.request_type,
             canvas_json={"objects": [{
-                "type": "textbox", "text": "Titre", "left": 30, "top": 30,
+                "type": "Textbox", "text": "Titre", "left": 30, "top": 30,
                 "width": 150, "fontSize": 14, "fontFamily": font.name, "fill": "#000000", "data": {},
             }]},
         )
@@ -164,7 +164,7 @@ class TemplatePdfRenderingTests(TestCase):
         DocumentTemplate.objects.create(
             request_type=self.request_type,
             canvas_json={"objects": [{
-                "type": "textbox", "text": "Titre", "left": 30, "top": 30,
+                "type": "Textbox", "text": "Titre", "left": 30, "top": 30,
                 "width": 150, "fontSize": 14, "fontFamily": "PoliceInexistante", "fill": "#000000", "data": {},
             }]},
         )
