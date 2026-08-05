@@ -5,7 +5,6 @@ from django.contrib.auth.models import Group, User
 from django.db import models
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.utils.html import format_html
 from django_json_widget.widgets import JSONEditorWidget
 from unfold.admin import ModelAdmin
 from unfold.decorators import action, display
@@ -297,16 +296,19 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
     field_widgets = {"form_schema": FormSchemaBuilderWidget}
     list_display = (
         "name", "code", "is_active", "schema_version", "resume_on_resubmit",
-        "is_sensitive", "default_rule_display", "template_editor_link",
+        "is_sensitive", "default_rule_display",
     )
     list_filter = ("is_active", "is_sensitive")
     search_fields = ("name", "code")
     inlines = [ApprovalRuleInline]
 
-    @display(description="Mise en page PDF")
-    def template_editor_link(self, obj):
-        url = reverse("approvals:document_template_editor", args=[obj.pk])
-        return format_html('<a href="{}">Concevoir le PDF →</a>', url)
+    # Le lien "Concevoir le PDF" (éditeur visuel Fabric.js, voir
+    # approvals/templates/approvals/document_template_editor.html) a été
+    # retiré de la liste — retour client : dessiner la mise en page à la
+    # main risque trop l'erreur pour un admin fonctionnel pressé. Le code
+    # (modèle DocumentTemplate, vue, éditeur) reste en place, juste plus
+    # accessible depuis cette page — l'URL /mise-en-page/<id>/ fonctionne
+    # toujours pour qui en aurait besoin plus tard.
 
     @display(description="Règle par défaut (dernier niveau)", boolean=True)
     def default_rule_display(self, obj):
