@@ -86,6 +86,30 @@ _STATUS_COLORS = {
     "RETURNED": (29, 95, 176),
 }
 
+# Typographie du corps du document (voir DocumentBranding.body_font/
+# body_font_size/line_spacing/underline_values) — les hauteurs de ligne
+# ci-dessous ont été calées pour une taille de base de 11pt en espacement
+# "normal" ; "scale" les ajuste proportionnellement pour toute autre taille/
+# espacement choisi par l'admin.
+_SPACING_MULTIPLIERS = {"compact": 0.8, "normal": 1.0, "spacious": 1.3}
+_DEFAULT_STYLE = {"family": "Helvetica", "size": 11, "is_builtin": True, "scale": 1.0, "underline": False}
+
+
+def _resolve_body_style(branding, registered_fonts):
+    size = (branding.body_font_size if branding else None) or 11
+    family = ((branding.body_font if branding else "") or "Helvetica").strip() or "Helvetica"
+    if family not in _BUILTIN_FONT_FAMILIES and (family, "") not in registered_fonts:
+        family = "Helvetica"  # police non enregistrée (fichier manquant/corrompu) : repli sûr
+    spacing_key = branding.line_spacing if branding else "normal"
+    scale = (size / 11.0) * _SPACING_MULTIPLIERS.get(spacing_key, 1.0)
+    return {
+        "family": family,
+        "size": size,
+        "is_builtin": family in _BUILTIN_FONT_FAMILIES,
+        "scale": scale,
+        "underline": bool(branding and branding.underline_values),
+    }
+
 
 def _pdf_safe(text):
     for original, replacement in _TYPOGRAPHIC_REPLACEMENTS.items():
@@ -93,8 +117,9 @@ def _pdf_safe(text):
     return text.encode("latin-1", errors="replace").decode("latin-1")
 
 
-def _write_line(pdf, text, height=6):
-    pdf.multi_cell(0, height, _pdf_safe(text), **_NEXT_LINE)
+def _write_line(pdf, text, height=6, safe=True):
+    text = _pdf_safe(text) if safe else str(text)
+    pdf.multi_cell(0, height, text, **_NEXT_LINE)
 
 
 # new_x=LEFT (pas LMARGIN) : ramène le curseur au bord gauche de LA COLONNE
@@ -103,8 +128,9 @@ def _write_line(pdf, text, height=6):
 _COL_NEXT_LINE = {"new_x": XPos.LEFT, "new_y": YPos.NEXT}
 
 
-def _write_col_line(pdf, text, width, height=6):
-    pdf.multi_cell(width, height, _pdf_safe(text), **_COL_NEXT_LINE)
+def _write_col_line(pdf, text, width, height=6, safe=True):
+    text = _pdf_safe(text) if safe else str(text)
+    pdf.multi_cell(width, height, text, **_COL_NEXT_LINE)
 
 
 def _display_value(row):
@@ -126,38 +152,49 @@ def _row_color(row, accent_rgb):
     return (0, 0, 0)
 
 
-def _render_two_col_row(pdf, left_row, right_row, col_width, accent_rgb=_ACCENT_RGB):
+def _render_two_col_row(pdf, left_row, right_row, col_width, accent_rgb=_ACCENT_RGB, style=None):
     """Affiche un ou deux champs côte à côte (label en petit/gras au-dessus
     de la valeur) — retombe sur une seule colonne si right_row est None
     (dernier champ impair d'une section)."""
+    style = style or _DEFAULT_STYLE
+    family, is_builtin, scale = style["family"], style["is_builtin"], style["scale"]
+    label_size = max(6, style["size"] - 2)
+    label_h, value_h, row_h = 5 * scale, 6 * scale, 13 * scale
+
     y0 = pdf.get_y()
     x_left = pdf.l_margin
     x_right = x_left + col_width + _COL_GUTTER_MM
 
-    pdf.set_xy(x_left, y0)
-    pdf.set_font("Helvetica", "B", 9)
-    _write_col_line(pdf, str(left_row["label"]).upper(), col_width, height=5)
-    pdf.set_font("Helvetica", "", 11)
-    pdf.set_text_color(*_row_color(left_row, accent_rgb))
-    _write_col_line(pdf, _display_value(left_row), col_width, height=6)
-    pdf.set_text_color(0, 0, 0)
-
-    if right_row is not None:
-        pdf.set_xy(x_right, y0)
-        pdf.set_font("Helvetica", "B", 9)
-        _write_col_line(pdf, str(right_row["label"]).upper(), col_width, height=5)
-        pdf.set_font("Helvetica", "", 11)
-        pdf.set_text_color(*_row_color(right_row, accent_rgb))
-        _write_col_line(pdf, _display_value(right_row), col_width, height=6)
+    def render_cell(row, x):
+        pdf.set_xy(x, y0)
+        pdf.set_font(family, "B", label_size)
+        _write_col_line(pdf, str(row["label"]).upper(), col_width, height=label_h, safe=is_builtin)
+        pdf.set_font(family, "", style["size"])
+        pdf.set_text_color(*_row_color(row, accent_rgb))
+        value_y = pdf.get_y()
+        _write_col_line(pdf, _display_value(row), col_width, height=value_h, safe=is_builtin)
         pdf.set_text_color(0, 0, 0)
+        if style["underline"]:
+            underline_y = value_y + value_h - 0.5
+            pdf.set_draw_color(150, 150, 150)
+            pdf.set_line_width(0.2)
+            pdf.line(x, underline_y, x + col_width, underline_y)
+            pdf.set_draw_color(0, 0, 0)
 
-    pdf.set_xy(x_left, y0 + 13)
+    render_cell(left_row, x_left)
+    if right_row is not None:
+        render_cell(right_row, x_right)
+
+    pdf.set_xy(x_left, y0 + row_h)
 
 
-def _render_field_rows(pdf, rows, col_width, accent_rgb=_ACCENT_RGB):
+def _render_field_rows(pdf, rows, col_width, accent_rgb=_ACCENT_RGB, style=None):
     """Empile des paires de champs courts côte à côte, et les champs longs
     (zone de texte) sur toute la largeur — mélange les deux dans l'ordre où
     les champs apparaissent, comme sur les formulaires papier existants."""
+    style = style or _DEFAULT_STYLE
+    family, is_builtin, scale = style["family"], style["is_builtin"], style["scale"]
+    label_size = max(6, style["size"] - 2)
     pending = None
     for row in rows:
         value_str = _display_value(row)
@@ -165,21 +202,21 @@ def _render_field_rows(pdf, rows, col_width, accent_rgb=_ACCENT_RGB):
             if pending is None:
                 pending = row
             else:
-                _render_two_col_row(pdf, pending, row, col_width, accent_rgb)
+                _render_two_col_row(pdf, pending, row, col_width, accent_rgb, style)
                 pending = None
         else:
             if pending is not None:
-                _render_two_col_row(pdf, pending, None, col_width, accent_rgb)
+                _render_two_col_row(pdf, pending, None, col_width, accent_rgb, style)
                 pending = None
-            pdf.set_font("Helvetica", "B", 9)
-            _write_line(pdf, str(row["label"]).upper(), height=5)
-            pdf.set_font("Helvetica", "", 11)
+            pdf.set_font(family, "B", label_size)
+            _write_line(pdf, str(row["label"]).upper(), height=5 * scale, safe=is_builtin)
+            pdf.set_font(family, "", style["size"])
             pdf.set_text_color(*_row_color(row, accent_rgb))
-            _write_line(pdf, value_str, height=6)
+            _write_line(pdf, value_str, height=6 * scale, safe=is_builtin)
             pdf.set_text_color(0, 0, 0)
-            pdf.ln(2)
+            pdf.ln(2 * scale)
     if pending is not None:
-        _render_two_col_row(pdf, pending, None, col_width, accent_rgb)
+        _render_two_col_row(pdf, pending, None, col_width, accent_rgb, style)
 
 
 class _BrandedPDF(FPDF):
@@ -369,13 +406,16 @@ def _generate_auto_layout(req):
     pdf = _BrandedPDF(branding)
     pdf.set_compression(False)  # PDF lisible en clair (pratique pour les tests, coût négligeable ici)
     pdf.alias_nb_pages()  # {nb} dans footer() : nombre total de pages, résolu à la génération finale
+    registered_fonts = _register_custom_fonts(pdf)
+    style = _resolve_body_style(branding, registered_fonts)
+    family, is_builtin, scale = style["family"], style["is_builtin"], style["scale"]
     pdf.set_auto_page_break(auto=True, margin=25)
     pdf.add_page()
     col_width = (pdf.w - pdf.l_margin - pdf.r_margin - _COL_GUTTER_MM) / 2
 
-    pdf.set_font("Helvetica", "B", 16)
-    _write_line(pdf, req.request_type.name, height=10)
-    pdf.ln(2)
+    pdf.set_font(family, "B", style["size"] + 5)
+    _write_line(pdf, req.request_type.name, height=10 * scale, safe=is_builtin)
+    pdf.ln(2 * scale)
 
     meta_rows = [
         {"label": "Reference", "value": req.reference},
@@ -385,27 +425,27 @@ def _generate_auto_layout(req):
         {"label": "Soumise le",
          "value": req.submitted_at.strftime("%d/%m/%Y %H:%M") if req.submitted_at else "-"},
     ]
-    _render_two_col_row(pdf, meta_rows[0], meta_rows[1], col_width, accent_rgb)
-    _render_two_col_row(pdf, meta_rows[2], meta_rows[3], col_width, accent_rgb)
-    pdf.ln(2)
+    _render_two_col_row(pdf, meta_rows[0], meta_rows[1], col_width, accent_rgb, style)
+    _render_two_col_row(pdf, meta_rows[2], meta_rows[3], col_width, accent_rgb, style)
+    pdf.ln(2 * scale)
 
     pdf.set_draw_color(*accent_rgb)
     pdf.set_line_width(0.5)
     pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-    pdf.ln(5)
+    pdf.ln(5 * scale)
 
     for group in grouped_labeled_data(req.request_type, req.data or {}):
         if group["section"]:
-            pdf.set_font("Helvetica", "B", 13)
+            pdf.set_font(family, "B", style["size"] + 2)
             pdf.set_text_color(*accent_rgb)
-            _write_line(pdf, group["section"], height=8)
+            _write_line(pdf, group["section"], height=8 * scale, safe=is_builtin)
             pdf.set_draw_color(*accent_rgb)
             pdf.set_line_width(0.3)
             pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
             pdf.set_text_color(0, 0, 0)
-            pdf.ln(3)
+            pdf.ln(3 * scale)
 
-        _render_field_rows(pdf, group["rows"], col_width, accent_rgb)
-        pdf.ln(2)
+        _render_field_rows(pdf, group["rows"], col_width, accent_rgb, style)
+        pdf.ln(2 * scale)
 
     return bytes(pdf.output())

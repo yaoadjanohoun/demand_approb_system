@@ -194,3 +194,24 @@ class PdfExportBrandingTests(TestCase):
         )
         pdf_bytes = generate_request_summary_pdf(req)
         self.assertIn(b"1 0 0 rg", pdf_bytes)
+
+    def test_custom_font_size_changes_title_size(self):
+        DocumentBranding.objects.create(request_type=self.request_type, body_font_size=14)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        # Titre = taille de base + 5 (voir _generate_auto_layout) : 14 + 5 = 19.
+        self.assertIn(b"19.00 Tf", pdf_bytes)
+
+    def test_underline_values_draws_lines_under_short_values(self):
+        DocumentBranding.objects.create(request_type=self.request_type, underline_values=True)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b" G\n", pdf_bytes)  # trait gris (set_draw_color) tracé sous une valeur
+
+    def test_no_underline_by_default(self):
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertNotIn(b"0.5882 0.5882 0.5882 RG", pdf_bytes)
+
+    def test_invalid_custom_font_name_falls_back_to_helvetica(self):
+        DocumentBranding.objects.create(request_type=self.request_type, body_font="PoliceInexistante")
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn(b"Nouveau rapport", pdf_bytes)

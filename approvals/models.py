@@ -3,7 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import FileExtensionValidator, RegexValidator
+from django.core.validators import FileExtensionValidator, MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 
 from . import crypto
@@ -224,6 +224,33 @@ class DocumentBranding(models.Model):
         validators=[RegexValidator(r"^#[0-9A-Fa-f]{6}$", "Format attendu : #RRGGBB (ex: #1F3A5F).")],
         help_text="Couleur des titres de section et des champs mis en évidence (format #RRGGBB). "
         "Laisser vide pour la couleur par défaut.",
+    )
+    body_font = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Police du corps du document — Helvetica, Times, Courier, ou le nom exact "
+        "d'une police personnalisée (voir Polices personnalisées). Laisser vide pour Helvetica.",
+    )
+    body_font_size = models.PositiveIntegerField(
+        default=11,
+        validators=[MinValueValidator(6), MaxValueValidator(20)],
+        help_text="Taille de police (points) des valeurs des champs — titres, labels et titres "
+        "de section restent proportionnels à cette taille.",
+    )
+
+    class LineSpacing(models.TextChoices):
+        COMPACT = "compact", "Compact"
+        NORMAL = "normal", "Normal"
+        SPACIOUS = "spacious", "Aéré"
+
+    line_spacing = models.CharField(
+        max_length=10, choices=LineSpacing.choices, default=LineSpacing.NORMAL,
+        help_text="Espacement entre les lignes et les paragraphes du PDF.",
+    )
+    underline_values = models.BooleanField(
+        default=False,
+        help_text="Affiche un trait fin sous chaque valeur courte, comme un formulaire papier "
+        "(ex: \"Nom : ______________\").",
     )
 
     class Meta:

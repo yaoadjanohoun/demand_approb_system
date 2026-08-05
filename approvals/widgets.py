@@ -20,6 +20,7 @@ FIELD_TYPE_CHOICES = [
     ("decimal", "Nombre décimal"),
     ("date", "Date"),
     ("boolean", "Case à cocher"),
+    ("choice", "Liste à boutons"),
     ("file", "Fichier (non supporté pour l'instant)"),
 ]
 
@@ -55,6 +56,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
         <th style="text-align:left; padding:4px;">Label affiché</th>
         <th style="text-align:left; padding:4px;">Section</th>
         <th style="text-align:left; padding:4px;">Type</th>
+        <th style="text-align:left; padding:4px;">Choix (si "Liste à boutons")</th>
         <th style="text-align:left; padding:4px;">Obligatoire</th>
         <th style="text-align:left; padding:4px;">Champ montant</th>
         <th style="text-align:left; padding:4px;">Mettre en évidence</th>
@@ -71,7 +73,9 @@ class FormSchemaBuilderWidget(forms.Textarea):
     "Section" : regroupe les champs sous un même sous-titre dans le formulaire et le PDF
     (ex: "Informations sur le demandeur") — laisser vide pour ne pas regrouper.<br>
     "Mettre en évidence" : affiche la valeur de ce champ en couleur de marque dans le PDF
-    (voir Habillage de document → Couleur) — pour les informations importantes.
+    (voir Habillage de document → Couleur) — pour les informations importantes.<br>
+    "Choix" : options séparées par une virgule (ex: "Oui, Non, Peut-être") — uniquement
+    utilisé pour le type "Liste à boutons".
   </p>
   <div style="display:none;">{textarea_html}</div>
 </div>
@@ -130,6 +134,15 @@ class FormSchemaBuilderWidget(forms.Textarea):
     }});
     typeTd.appendChild(typeSelect);
 
+    const choicesTd = document.createElement("td");
+    const choicesInput = document.createElement("input");
+    choicesInput.type = "text";
+    choicesInput.className = "fsb-choices";
+    choicesInput.placeholder = "ex: Oui, Non, Peut-être";
+    choicesInput.value = (field.choices || []).join(", ");
+    choicesInput.style.width = "100%";
+    choicesTd.appendChild(choicesInput);
+
     const reqTd = document.createElement("td");
     reqTd.style.textAlign = "center";
     const reqInput = document.createElement("input");
@@ -174,6 +187,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
     tr.appendChild(labelTd);
     tr.appendChild(sectionTd);
     tr.appendChild(typeTd);
+    tr.appendChild(choicesTd);
     tr.appendChild(reqTd);
     tr.appendChild(amountTd);
     tr.appendChild(highlightTd);
@@ -211,6 +225,10 @@ class FormSchemaBuilderWidget(forms.Textarea):
       }}
       if (tr.querySelector(".fsb-highlight").checked) {{
         result.highlight = true;
+      }}
+      if (result.type === "choice") {{
+        result.choices = tr.querySelector(".fsb-choices").value
+          .split(",").map(function(c) {{ return c.trim(); }}).filter(function(c) {{ return c !== ""; }});
       }}
       return result;
     }}).filter(function(f) {{ return f.name !== ""; }});

@@ -18,7 +18,7 @@ FORM_SCHEMA = {  # Schéma A — RequestType.form_schema
                     "name": {"type": "string", "pattern": "^[a-z_]+$"},
                     "type": {
                         "type": "string",
-                        "enum": ["text", "number", "decimal", "date", "boolean", "file"],
+                        "enum": ["text", "number", "decimal", "date", "boolean", "file", "choice"],
                     },
                     "label": {"type": "string"},
                     "required": {"type": "boolean"},
@@ -31,6 +31,12 @@ FORM_SCHEMA = {  # Schéma A — RequestType.form_schema
                         "type": "boolean",
                         "description": "Affiche ce champ en couleur de marque dans le PDF (voir "
                         "DocumentBranding.accent_color) — pour les informations jugées importantes.",
+                    },
+                    "choices": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Options proposées (liste à boutons) — uniquement pour le "
+                        "type 'choice'.",
                     },
                 },
             },

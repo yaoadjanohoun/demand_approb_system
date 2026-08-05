@@ -34,11 +34,17 @@ class PersonalInfoForm(forms.ModelForm):
 
 
 FIELD_BUILDERS = {
-    "text": lambda: forms.CharField(widget=forms.Textarea(attrs={"rows": 3})),
-    "number": lambda: forms.IntegerField(),
-    "decimal": lambda: forms.DecimalField(max_digits=12, decimal_places=2),
-    "date": lambda: forms.DateField(widget=forms.DateInput(attrs={"type": "date"})),
-    "boolean": lambda: forms.BooleanField(),
+    "text": lambda field_def: forms.CharField(widget=forms.Textarea(attrs={"rows": 3})),
+    "number": lambda field_def: forms.IntegerField(),
+    "decimal": lambda field_def: forms.DecimalField(max_digits=12, decimal_places=2),
+    "date": lambda field_def: forms.DateField(widget=forms.DateInput(attrs={"type": "date"})),
+    "boolean": lambda field_def: forms.BooleanField(),
+    # "Liste à boutons" (retour client) : options définies par l'admin dans le
+    # constructeur de formulaire (FormSchemaBuilderWidget), affichées en radio.
+    "choice": lambda field_def: forms.ChoiceField(
+        choices=[(c, c) for c in field_def.get("choices", [])],
+        widget=forms.RadioSelect,
+    ),
 }
 
 
@@ -58,7 +64,7 @@ def build_dynamic_form(request_type, data=None, initial=None):
         builder = FIELD_BUILDERS.get(field_type)
         if builder is None:
             continue  # type "file" ou inconnu : non supporté pour l'instant
-        field = builder()
+        field = builder(field_def)
         field.required = bool(field_def.get("required", False))
         field.label = field_def.get("label") or field_def["name"].replace("_", " ").capitalize()
         if field_type == "date":

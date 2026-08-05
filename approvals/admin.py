@@ -395,6 +395,17 @@ class DocumentBrandingAdmin(NamedFieldWidgetMixin, ModelAdmin):
                 ),
             },
         ),
+        (
+            "Typographie",
+            {
+                "fields": ("body_font", "body_font_size", "line_spacing", "underline_values"),
+                "description": (
+                    "Police, taille et espacement du corps du PDF (titres/labels restent "
+                    "proportionnels à la taille choisie) — \"Souligner les valeurs\" affiche "
+                    "un trait fin sous chaque valeur courte, comme un formulaire papier."
+                ),
+            },
+        ),
     )
 
 
