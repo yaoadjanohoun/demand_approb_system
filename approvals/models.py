@@ -142,6 +142,14 @@ class UserProfile(models.Model):
         help_text="JPG ou PNG, 2 Mo maximum.",
     )
 
+    # Dessinée une fois dans "Mon profil" (pavé tactile/souris), réutilisée
+    # telle quelle sur chaque PDF de demande approuvée par cet utilisateur
+    # (voir approvals/pdf_export.py, section Approbations).
+    signature = models.ImageField(
+        upload_to="signatures/", null=True, blank=True,
+        validators=[FileExtensionValidator(["png"])],
+    )
+
     # Mis à jour par TrackLastSeenMiddleware à chaque requête authentifiée
     # (throttlé, voir le middleware) — sert à proposer un approbateur de
     # secours "actif aujourd'hui" quand un demandeur n'a personne pour

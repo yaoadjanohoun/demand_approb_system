@@ -64,6 +64,105 @@
 </div>
 
 <div class="card">
+    <div class="card-title">Signature</div>
+    <p class="card-note">
+        Dessinée une seule fois ici, elle est réutilisée automatiquement sur le PDF de résumé
+        de chaque demande que tu approuves.
+    </p>
+    {% if profile.signature %}
+        <img src="{{ profile.signature.url }}" alt="Signature enregistrée" style="max-width:300px; border:1px solid #d8dee5; border-radius:6px; background:#fff; display:block; margin-bottom:0.75rem;">
+        <form method="post" style="display:inline-block; margin-right:0.5rem;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="remove_signature">
+            <button type="submit" class="btn btn-secondary">Supprimer la signature</button>
+        </form>
+    {% endif %}
+    <div style="margin-top:0.5rem;">
+        <canvas id="signature-pad" width="600" height="180" style="border:1px solid #d8dee5; border-radius:6px; background:#fff; touch-action:none; max-width:100%;"></canvas>
+    </div>
+    <form method="post" id="signature-form" style="margin-top:0.5rem;">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_signature">
+        <input type="hidden" name="signature_data" id="signature-data">
+        <p id="signature-error" class="field-error" style="display:none; color:#c1362b;"></p>
+        <button type="button" id="signature-clear" class="btn btn-secondary">Effacer</button>
+        <button type="submit" class="btn btn-primary">Enregistrer la signature</button>
+    </form>
+    <script>
+        (function () {
+            var canvas = document.getElementById('signature-pad');
+            var form = document.getElementById('signature-form');
+            var dataInput = document.getElementById('signature-data');
+            var errorBox = document.getElementById('signature-error');
+            var clearBtn = document.getElementById('signature-clear');
+            if (!canvas || !form || !dataInput) return;
+
+            var ctx = canvas.getContext('2d');
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#1c2733';
+            var drawing = false;
+            var hasStroke = false;
+
+            function pointFromEvent(event) {
+                var rect = canvas.getBoundingClientRect();
+                var scaleX = canvas.width / rect.width;
+                var scaleY = canvas.height / rect.height;
+                var source = event.touches && event.touches.length ? event.touches[0] : event;
+                return {
+                    x: (source.clientX - rect.left) * scaleX,
+                    y: (source.clientY - rect.top) * scaleY,
+                };
+            }
+
+            function start(event) {
+                event.preventDefault();
+                drawing = true;
+                hasStroke = true;
+                var p = pointFromEvent(event);
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+            }
+
+            function move(event) {
+                if (!drawing) return;
+                event.preventDefault();
+                var p = pointFromEvent(event);
+                ctx.lineTo(p.x, p.y);
+                ctx.stroke();
+            }
+
+            function stop() {
+                drawing = false;
+            }
+
+            canvas.addEventListener('mousedown', start);
+            canvas.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', stop);
+            canvas.addEventListener('touchstart', start);
+            canvas.addEventListener('touchmove', move);
+            canvas.addEventListener('touchend', stop);
+
+            clearBtn.addEventListener('click', function () {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                hasStroke = false;
+            });
+
+            form.addEventListener('submit', function (event) {
+                if (!hasStroke) {
+                    event.preventDefault();
+                    errorBox.textContent = 'Dessine ta signature avant d\'enregistrer.';
+                    errorBox.style.display = 'block';
+                    return;
+                }
+                errorBox.style.display = 'none';
+                dataInput.value = canvas.toDataURL('image/png');
+            });
+        })();
+    </script>
+</div>
+
+<div class="card">
     <div class="card-title">Sécurité</div>
     <p style="margin:0 0 0.75rem;">Changer ton mot de passe :</p>
     <a class="btn btn-secondary" href="{% url 'password_reset' %}">Réinitialiser mon mot de passe</a>

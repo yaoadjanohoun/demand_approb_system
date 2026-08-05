@@ -11,7 +11,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 
 from .forms import grouped_form_fields, grouped_labeled_data, build_dynamic_form
-from .models import BrandingLogo, CustomFont, DocumentBranding, Request, RequestType
+from .models import ApprovalLog, BrandingLogo, CustomFont, DocumentBranding, Request, RequestType, UserProfile
 from .pdf_export import generate_request_summary_pdf
 
 
@@ -313,6 +313,87 @@ class PdfExportBrandingTests(TestCase):
         pdf_bytes = generate_request_summary_pdf(self.req)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertIn(b"Nouveau rapport", pdf_bytes)
+
+
+class ApprovalSectionPdfTests(TestCase):
+    """Section "Approbations" en fin de PDF : nom de l'approbateur, date, et
+    sa signature dessinée une fois dans son profil (retour client : reproduire
+    la section signature du formulaire papier)."""
+
+    @classmethod
+    def tearDownClass(cls):
+        from django.conf import settings
+
+        shutil.rmtree(settings.MEDIA_ROOT, ignore_errors=True)
+        super().tearDownClass()
+
+    def setUp(self):
+        self.employee = User.objects.create_user("employee_approval_pdf", password="x")
+        self.approver = User.objects.create_user(
+            "approver_pdf", password="x", first_name="Jeanne", last_name="Tremblay",
+        )
+        self.request_type = RequestType.objects.create(
+            name="Nouveau rapport", code="REPORT2", form_schema=SCHEMA_WITH_SECTIONS
+        )
+        self.req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee,
+            data={"departement": "Ventes", "titre_rapport": "Suivi"},
+        )
+
+    def _approve(self, level=1):
+        ApprovalLog.objects.create(
+            request=self.req, actor=self.approver, action_type=ApprovalLog.ActionType.APPROVE,
+            context={"level": level},
+        )
+
+    def test_no_approval_section_when_never_approved(self):
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertNotIn(b"Approbations", pdf_bytes)
+
+    def test_approval_section_shows_approver_name_and_level(self):
+        self._approve(level=1)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"Approbations", pdf_bytes)
+        self.assertIn(b"Niveau 1", pdf_bytes)
+        self.assertIn(b"Jeanne Tremblay", pdf_bytes)
+
+    def test_multiple_approval_levels_all_listed(self):
+        self._approve(level=1)
+        ApprovalLog.objects.create(
+            request=self.req, actor=self.employee, action_type=ApprovalLog.ActionType.APPROVE,
+            context={"level": 2},
+        )
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"Niveau 1", pdf_bytes)
+        self.assertIn(b"Niveau 2", pdf_bytes)
+
+    def test_approval_section_includes_signature_image_when_profile_has_one(self):
+        profile, _ = UserProfile.objects.get_or_create(user=self.approver)
+        profile.signature.save("signature.png", _tiny_png(), save=True)
+        self._approve(level=1)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn(b"/Image", pdf_bytes)
+
+    def test_missing_signature_file_does_not_crash_generation(self):
+        profile, _ = UserProfile.objects.get_or_create(user=self.approver)
+        profile.signature.save("signature.png", _tiny_png(), save=True)
+        profile.signature.delete(save=False)
+        profile.signature.name = "signatures/disparu.png"
+        profile.save()
+        self._approve(level=1)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn(b"Jeanne Tremblay", pdf_bytes)
+
+    def test_approval_without_actor_shows_placeholder(self):
+        ApprovalLog.objects.create(
+            request=self.req, actor=None, action_type=ApprovalLog.ActionType.APPROVE,
+            context={"level": 1},
+        )
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
+        self.assertIn(b"Approbations", pdf_bytes)
 
     def test_custom_font_without_bold_variant_does_not_crash_generation(self):
         """Bug réel observé : une police personnalisée enregistrée avec

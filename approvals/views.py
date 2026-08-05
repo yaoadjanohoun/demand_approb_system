@@ -1,6 +1,9 @@
+import base64
+import binascii
 import json
 
 from django.contrib import messages
+from django.core.files.base import ContentFile
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
@@ -49,6 +52,26 @@ def dashboard(request):
 
 #vue du profil utilisateur
 
+SIGNATURE_MAX_SIZE_MB = 2
+_SIGNATURE_DATA_URL_PREFIX = "data:image/png;base64,"
+
+
+def _decode_signature_data_url(data_url):
+    """Décode le PNG (data URL) envoyé par le pavé de signature (canvas HTML,
+    voir profile.html). Retourne un ContentFile ou None si la donnée est
+    absente, mal formée ou trop volumineuse — jamais d'exception : un envoi
+    invalide ne doit pas planter la vue, juste être ignoré silencieusement."""
+    if not data_url or not data_url.startswith(_SIGNATURE_DATA_URL_PREFIX):
+        return None
+    try:
+        raw = base64.b64decode(data_url[len(_SIGNATURE_DATA_URL_PREFIX):], validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    if not raw or len(raw) > SIGNATURE_MAX_SIZE_MB * 1024 * 1024:
+        return None
+    return ContentFile(raw, name="signature.png")
+
+
 @login_required
 def profile(request):
     user_profile, _ = UserProfile.objects.get_or_create(user=request.user)
@@ -59,6 +82,24 @@ def profile(request):
         user_profile.photo = None
         user_profile.save()
         messages.success(request, "Photo de profil supprimée.")
+        return redirect("approvals:profile")
+
+    if action == "update_signature":
+        signature_file = _decode_signature_data_url(request.POST.get("signature_data"))
+        if signature_file is None:
+            messages.error(request, "Signature invalide ou vide — réessaie.")
+        else:
+            user_profile.signature.delete(save=False)
+            user_profile.signature = signature_file
+            user_profile.save()
+            messages.success(request, "Signature enregistrée.")
+        return redirect("approvals:profile")
+
+    if action == "remove_signature":
+        user_profile.signature.delete(save=False)
+        user_profile.signature = None
+        user_profile.save()
+        messages.success(request, "Signature supprimée.")
         return redirect("approvals:profile")
 
     if action == "update_info":
@@ -501,6 +542,12 @@ def request_download_pdf(request, pk):
     # la page de détail (retour client), pas seulement téléchargeable — le
     # visualiseur PDF du navigateur permet quand même de l'enregistrer.
     response["Content-Disposition"] = f'inline; filename="{req.reference}.pdf"'
+    # Le PDF est régénéré à chaque requête (habillage, statut, approbations
+    # peuvent changer) mais l'URL est fixe par demande — sans ces en-têtes,
+    # certains navigateurs affichent une version en cache après une mise à
+    # jour du contenu ou du code de génération, donnant l'impression à tort
+    # qu'un changement n'a pas été pris en compte.
+    response["Cache-Control"] = "no-store"
     return response
 
 

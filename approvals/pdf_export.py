@@ -15,7 +15,7 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 from .forms import _format_value, grouped_labeled_data
-from .models import BrandingLogo, CustomFont, DocumentBranding, DocumentTemplate
+from .models import ApprovalLog, BrandingLogo, CustomFont, DocumentBranding, DocumentTemplate
 
 # fpdf2's write_html() ne comprend que l'attribut HTML align="..." sur une
 # balise, pas la CSS style="text-align: ...". Or RichTextWidget (bouton
@@ -24,7 +24,7 @@ from .models import BrandingLogo, CustomFont, DocumentBranding, DocumentTemplate
 # l'alignement était donc silencieusement ignoré (toujours à gauche).
 # Converti ici en <p align="..."> avant de passer à write_html().
 _ALIGN_STYLE_RE = re.compile(
-    r'<div style="text-align:\s*(left|center|right|justify);?">(.*?)</div>',
+    r'<div style="[^"]*?text-align:\s*(left|center|right|justify)[^"]*">(.*?)</div>',
     re.IGNORECASE | re.DOTALL,
 )
 
@@ -67,6 +67,7 @@ _LOGO_HEIGHT_MM = 14
 _LOGO_GAP_MM = 6
 _FOOTER_IMAGE_HEIGHT_MM = 8
 _FOOTER_TOP_MM = 24
+_APPROVAL_SIGNATURE_HEIGHT_MM = 15
 
 # Rendu automatique (voir _generate_auto_layout) : bleu-gris sobre pour les
 # titres de section et les filets, cohérent avec un document d'entreprise
@@ -477,7 +478,7 @@ def _generate_auto_layout(req):
         {"label": "Statut", "value": req.get_status_display(),
          "color": _resolve_status_color(branding, req.status)},
         {"label": "Demandeur", "value": req.requester.get_full_name() or req.requester.username},
-        {"label": "Soumise le",
+        {"label": "Soumise le", #
          # submitted_at est stocké en UTC en base ; sans localtime() le PDF
          # affichait l'heure GMT au lieu de l'heure locale (TIME_ZONE du
          # site, America/Toronto) — contrairement aux templates HTML, qui la
@@ -507,4 +508,52 @@ def _generate_auto_layout(req):
         _render_field_rows(pdf, group["rows"], col_width, accent_rgb, style)
         pdf.ln(2 * scale)
 
+    _render_approvals_section(pdf, req, family, is_builtin, scale, accent_rgb, style)
+
     return bytes(pdf.output())
+
+
+def _render_approvals_section(pdf, req, family, is_builtin, scale, accent_rgb, style):
+    """Section finale listant qui a approuvé, quand, et sa signature (dessinée
+    une fois dans le profil — voir UserProfile.signature) — un log ApprovalLog
+    par niveau franchi (retour client : reproduire la section signature du
+    formulaire papier)."""
+    approval_logs = list(
+        req.logs.filter(action_type=ApprovalLog.ActionType.APPROVE).order_by("timestamp")
+    )
+    if not approval_logs:
+        return
+
+    pdf.ln(2 * scale)
+    pdf.set_font(family, style["bold_style"], style["size"] + 2)
+    pdf.set_text_color(*accent_rgb)
+    _write_line(pdf, "Approbations", height=8 * scale, safe=is_builtin)
+    pdf.set_draw_color(*accent_rgb)
+    pdf.set_line_width(0.3)
+    pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(3 * scale)
+
+    for log in approval_logs:
+        level = (log.context or {}).get("level")
+        label = f"Niveau {level}" if level else "Approbation"
+        approver_name, signature_path = "-", None
+        if log.actor:
+            approver_name = log.actor.get_full_name() or log.actor.username
+            profile = getattr(log.actor, "profile", None)
+            if profile and profile.signature:
+                signature_path = profile.signature.path
+        approved_at = timezone.localtime(log.timestamp).strftime("%d/%m/%Y %H:%M")
+
+        pdf.set_font(family, style["bold_style"], style["size"])
+        _write_line(pdf, f"{label} — {approver_name}", height=6 * scale, safe=is_builtin)
+        pdf.set_font(family, "", max(style["size"] - 1, 6))
+        _write_line(pdf, f"Approuvé le {approved_at}", height=5 * scale, safe=is_builtin)
+
+        if signature_path:
+            try:
+                pdf.image(signature_path, x=pdf.l_margin, y=pdf.get_y() + 1, h=_APPROVAL_SIGNATURE_HEIGHT_MM)
+                pdf.set_y(pdf.get_y() + _APPROVAL_SIGNATURE_HEIGHT_MM + 1)
+            except Exception:
+                pass  # signature supprimée du disque ou illisible : le nom/la date restent affichés
+        pdf.ln(4 * scale)
