@@ -10,6 +10,7 @@ propre à chaque type de demande et s'affiche automatiquement sur chaque
 page, via header()/footer() (FPDF les rappelle à chaque saut de page)."""
 import re
 
+from django.utils import timezone
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
@@ -477,7 +478,11 @@ def _generate_auto_layout(req):
          "color": _resolve_status_color(branding, req.status)},
         {"label": "Demandeur", "value": req.requester.get_full_name() or req.requester.username},
         {"label": "Soumise le",
-         "value": req.submitted_at.strftime("%d/%m/%Y %H:%M") if req.submitted_at else "-"},
+         # submitted_at est stocké en UTC en base ; sans localtime() le PDF
+         # affichait l'heure GMT au lieu de l'heure locale (TIME_ZONE du
+         # site, America/Toronto) — contrairement aux templates HTML, qui la
+         # convertissent automatiquement.
+         "value": timezone.localtime(req.submitted_at).strftime("%d/%m/%Y %H:%M") if req.submitted_at else "-"},
     ]
     _render_two_col_row(pdf, meta_rows[0], meta_rows[1], col_width, accent_rgb, style)
     _render_two_col_row(pdf, meta_rows[2], meta_rows[3], col_width, accent_rgb, style)
