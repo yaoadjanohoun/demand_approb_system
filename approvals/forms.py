@@ -100,6 +100,7 @@ def labeled_data(request_type, data):
     field_defs = request_type.form_schema.get("fields", [])
     labels = {f["name"]: f.get("label") or f["name"].replace("_", " ").capitalize() for f in field_defs}
     sections = {f["name"]: f.get("section", "") for f in field_defs}
+    highlights = {f["name"]: f.get("highlight", False) for f in field_defs}
     decimal_fields = {f["name"] for f in field_defs if f["type"] == "decimal"}
     currency = request_type.default_currency
 
@@ -113,6 +114,7 @@ def labeled_data(request_type, data):
             "label": labels[name],
             "value": _format_value(data[name], name in decimal_fields, currency),
             "section": sections[name],
+            "highlight": highlights[name],
         })
         seen.add(name)
     for name, value in data.items():
@@ -121,6 +123,7 @@ def labeled_data(request_type, data):
                 "label": labels.get(name, name),
                 "value": _format_value(value, name in decimal_fields, currency),
                 "section": sections.get(name, ""),
+                "highlight": highlights.get(name, False),
             })
     return rows
 

@@ -3,7 +3,7 @@ import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import FileExtensionValidator
+from django.core.validators import FileExtensionValidator, RegexValidator
 from django.db import models
 
 from . import crypto
@@ -217,6 +217,13 @@ class DocumentBranding(models.Model):
         blank=True,
         help_text="Affiché en bas de chaque page du PDF (ex: mentions légales) — mise en "
         "forme simple possible (gras/italique/souligné/alignement).",
+    )
+    accent_color = models.CharField(
+        max_length=7,
+        blank=True,
+        validators=[RegexValidator(r"^#[0-9A-Fa-f]{6}$", "Format attendu : #RRGGBB (ex: #1F3A5F).")],
+        help_text="Couleur des titres de section et des champs mis en évidence (format #RRGGBB). "
+        "Laisser vide pour la couleur par défaut.",
     )
 
     class Meta:

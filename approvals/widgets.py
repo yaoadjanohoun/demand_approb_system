@@ -57,6 +57,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
         <th style="text-align:left; padding:4px;">Type</th>
         <th style="text-align:left; padding:4px;">Obligatoire</th>
         <th style="text-align:left; padding:4px;">Champ montant</th>
+        <th style="text-align:left; padding:4px;">Mettre en évidence</th>
         <th></th>
       </tr>
     </thead>
@@ -68,7 +69,9 @@ class FormSchemaBuilderWidget(forms.Textarea):
     "Montant minimum"/"Montant maximum" (Règles d'approbation) — sinon ces critères ne
     correspondront jamais.<br>
     "Section" : regroupe les champs sous un même sous-titre dans le formulaire et le PDF
-    (ex: "Informations sur le demandeur") — laisser vide pour ne pas regrouper.
+    (ex: "Informations sur le demandeur") — laisser vide pour ne pas regrouper.<br>
+    "Mettre en évidence" : affiche la valeur de ce champ en couleur de marque dans le PDF
+    (voir Habillage de document → Couleur) — pour les informations importantes.
   </p>
   <div style="display:none;">{textarea_html}</div>
 </div>
@@ -144,6 +147,14 @@ class FormSchemaBuilderWidget(forms.Textarea):
     amountInput.checked = !!field.isAmountField;
     amountTd.appendChild(amountInput);
 
+    const highlightTd = document.createElement("td");
+    highlightTd.style.textAlign = "center";
+    const highlightInput = document.createElement("input");
+    highlightInput.type = "checkbox";
+    highlightInput.className = "fsb-highlight";
+    highlightInput.checked = !!field.highlight;
+    highlightTd.appendChild(highlightInput);
+
     const delTd = document.createElement("td");
     const delBtn = document.createElement("button");
     delBtn.type = "button";
@@ -165,6 +176,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
     tr.appendChild(typeTd);
     tr.appendChild(reqTd);
     tr.appendChild(amountTd);
+    tr.appendChild(highlightTd);
     tr.appendChild(delTd);
     return tr;
   }}
@@ -196,6 +208,9 @@ class FormSchemaBuilderWidget(forms.Textarea):
       }};
       if (section) {{
         result.section = section;
+      }}
+      if (tr.querySelector(".fsb-highlight").checked) {{
+        result.highlight = true;
       }}
       return result;
     }}).filter(function(f) {{ return f.name !== ""; }});

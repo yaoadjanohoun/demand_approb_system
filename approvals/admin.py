@@ -384,6 +384,17 @@ class DocumentBrandingAdmin(NamedFieldWidgetMixin, ModelAdmin):
                 ),
             },
         ),
+        (
+            "Couleur",
+            {
+                "fields": ("accent_color",),
+                "description": (
+                    "Couleur des titres de section et des champs mis en évidence "
+                    "(cocher \"Mettre en évidence\" sur un champ du formulaire) — "
+                    "format #RRGGBB, ex: #1F3A5F. Laisser vide pour la couleur par défaut."
+                ),
+            },
+        ),
     )
 
 

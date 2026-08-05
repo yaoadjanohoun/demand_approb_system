@@ -2,6 +2,7 @@
 ex: "Informations sur le demandeur") et habillage de document par type de
 demande (DocumentBranding : logos, en-tête, pied de page) — retour client :
 coller à la structure des formulaires papier existants."""
+import re
 import shutil
 import tempfile
 
@@ -153,3 +154,43 @@ class PdfExportBrandingTests(TestCase):
         pdf_bytes = generate_request_summary_pdf(self.req)
         self.assertIn(b"Demandeur", pdf_bytes)
         self.assertIn(b"Rapport", pdf_bytes)
+
+    def test_footer_style_center_alignment_is_respected(self):
+        """RichTextWidget produit <div style="text-align: center;"> via
+        execCommand du navigateur — fpdf2.write_html() ignore silencieusement
+        cette CSS (il ne comprend que l'attribut HTML align=), le texte
+        restait à gauche malgré le réglage "centrer" choisi par l'admin."""
+        DocumentBranding.objects.create(
+            request_type=self.request_type,
+            footer_text='<div style="text-align: center;">Centre</div>',
+        )
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        match = re.search(rb"BT ([\d.]+) [\d.]+ Td \(Centre\) Tj ET", pdf_bytes)
+        self.assertIsNotNone(match, "texte 'Centre' introuvable dans le flux PDF")
+        x_position = float(match.group(1))
+        self.assertGreater(x_position, 100, "le texte est resté aligné à gauche (marge ~28pt)")
+
+    def test_custom_accent_color_used_for_section_title(self):
+        DocumentBranding.objects.create(request_type=self.request_type, accent_color="#FF0000")
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"1 0 0 rg", pdf_bytes)
+
+    def test_default_accent_color_used_when_not_configured(self):
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"0.1216 0.2275 0.3725 rg", pdf_bytes)
+
+    def test_highlighted_field_uses_accent_color(self):
+        request_type = RequestType.objects.create(
+            name="Type surbrillance", code="HILITE",
+            form_schema={"fields": [
+                {"name": "champ_important", "type": "text", "label": "Champ important", "highlight": True},
+                {"name": "champ_normal", "type": "text", "label": "Champ normal"},
+            ]},
+        )
+        DocumentBranding.objects.create(request_type=request_type, accent_color="#FF0000")
+        req = Request.objects.create(
+            request_type=request_type, requester=self.employee,
+            data={"champ_important": "Urgent", "champ_normal": "Normal"},
+        )
+        pdf_bytes = generate_request_summary_pdf(req)
+        self.assertIn(b"1 0 0 rg", pdf_bytes)

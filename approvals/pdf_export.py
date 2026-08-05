@@ -8,11 +8,28 @@ de référence : aucun champ de formulaire PDF (AcroForm) n'est rempli.
 L'habillage (logos, en-tête, pied de page — voir DocumentBranding) est
 propre à chaque type de demande et s'affiche automatiquement sur chaque
 page, via header()/footer() (FPDF les rappelle à chaque saut de page)."""
+import re
+
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 
 from .forms import _format_value, grouped_labeled_data
 from .models import BrandingLogo, CustomFont, DocumentBranding, DocumentTemplate
+
+# fpdf2's write_html() ne comprend que l'attribut HTML align="..." sur une
+# balise, pas la CSS style="text-align: ...". Or RichTextWidget (bouton
+# "centrer" du header_text/footer_text) produit exactement ce style CSS via
+# document.execCommand du navigateur (<div style="text-align: center;">) —
+# l'alignement était donc silencieusement ignoré (toujours à gauche).
+# Converti ici en <p align="..."> avant de passer à write_html().
+_ALIGN_STYLE_RE = re.compile(
+    r'<div style="text-align:\s*(left|center|right|justify);?">(.*?)</div>',
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _fix_html_alignment(html):
+    return _ALIGN_STYLE_RE.sub(lambda m: f'<p align="{m.group(1).lower()}">{m.group(2)}</p>', html)
 
 # Doit correspondre à PX_PER_MM dans document_template_editor.html : l'éditeur
 # visuel travaille en pixels d'écran, le PDF en millimètres — même échelle
@@ -58,6 +75,17 @@ _COL_GUTTER_MM = 6
 # longueur évite qu'une valeur longue ne déborde de sa colonne.
 _SHORT_VALUE_MAX_CHARS = 30
 
+# Mêmes couleurs que les pastilles de statut de l'interface web (voir
+# .status-* dans app.css) — pour que le statut se reconnaisse d'un coup
+# d'œil, PDF comme écran.
+_STATUS_COLORS = {
+    "DRAFT": (75, 81, 96),
+    "PENDING": (179, 118, 10),
+    "APPROVED": (15, 138, 95),
+    "REJECTED": (193, 54, 43),
+    "RETURNED": (29, 95, 176),
+}
+
 
 def _pdf_safe(text):
     for original, replacement in _TYPOGRAPHIC_REPLACEMENTS.items():
@@ -87,7 +115,18 @@ def _is_short_value(value_str):
     return "\n" not in value_str and len(value_str) <= _SHORT_VALUE_MAX_CHARS
 
 
-def _render_two_col_row(pdf, left_row, right_row, col_width):
+def _row_color(row, accent_rgb):
+    """Couleur de la valeur : "color" explicite (ex: Statut) prioritaire sur
+    "highlight" (case "Mettre en évidence" du formulaire, voir form_schema),
+    sinon noir."""
+    if "color" in row:
+        return row["color"]
+    if row.get("highlight"):
+        return accent_rgb
+    return (0, 0, 0)
+
+
+def _render_two_col_row(pdf, left_row, right_row, col_width, accent_rgb=_ACCENT_RGB):
     """Affiche un ou deux champs côte à côte (label en petit/gras au-dessus
     de la valeur) — retombe sur une seule colonne si right_row est None
     (dernier champ impair d'une section)."""
@@ -99,19 +138,23 @@ def _render_two_col_row(pdf, left_row, right_row, col_width):
     pdf.set_font("Helvetica", "B", 9)
     _write_col_line(pdf, str(left_row["label"]).upper(), col_width, height=5)
     pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(*_row_color(left_row, accent_rgb))
     _write_col_line(pdf, _display_value(left_row), col_width, height=6)
+    pdf.set_text_color(0, 0, 0)
 
     if right_row is not None:
         pdf.set_xy(x_right, y0)
         pdf.set_font("Helvetica", "B", 9)
         _write_col_line(pdf, str(right_row["label"]).upper(), col_width, height=5)
         pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(*_row_color(right_row, accent_rgb))
         _write_col_line(pdf, _display_value(right_row), col_width, height=6)
+        pdf.set_text_color(0, 0, 0)
 
     pdf.set_xy(x_left, y0 + 13)
 
 
-def _render_field_rows(pdf, rows, col_width):
+def _render_field_rows(pdf, rows, col_width, accent_rgb=_ACCENT_RGB):
     """Empile des paires de champs courts côte à côte, et les champs longs
     (zone de texte) sur toute la largeur — mélange les deux dans l'ordre où
     les champs apparaissent, comme sur les formulaires papier existants."""
@@ -122,19 +165,21 @@ def _render_field_rows(pdf, rows, col_width):
             if pending is None:
                 pending = row
             else:
-                _render_two_col_row(pdf, pending, row, col_width)
+                _render_two_col_row(pdf, pending, row, col_width, accent_rgb)
                 pending = None
         else:
             if pending is not None:
-                _render_two_col_row(pdf, pending, None, col_width)
+                _render_two_col_row(pdf, pending, None, col_width, accent_rgb)
                 pending = None
             pdf.set_font("Helvetica", "B", 9)
             _write_line(pdf, str(row["label"]).upper(), height=5)
             pdf.set_font("Helvetica", "", 11)
+            pdf.set_text_color(*_row_color(row, accent_rgb))
             _write_line(pdf, value_str, height=6)
+            pdf.set_text_color(0, 0, 0)
             pdf.ln(2)
     if pending is not None:
-        _render_two_col_row(pdf, pending, None, col_width)
+        _render_two_col_row(pdf, pending, None, col_width, accent_rgb)
 
 
 class _BrandedPDF(FPDF):
@@ -161,14 +206,14 @@ class _BrandedPDF(FPDF):
             self.set_y(self.t_margin + _LOGO_HEIGHT_MM + 2)
         if self._branding.header_text:
             self.set_font("Helvetica", "", 9)
-            self._write_html_no_page_break(_pdf_safe(self._branding.header_text))
+            self._write_html_no_page_break(_pdf_safe(_fix_html_alignment(self._branding.header_text)))
         self.ln(2)
 
     def footer(self):
         if self._branding and self._branding.footer_text:
             self.set_y(-18)
             self.set_font("Helvetica", "", 8)
-            self._write_html_no_page_break(_pdf_safe(self._branding.footer_text))
+            self._write_html_no_page_break(_pdf_safe(_fix_html_alignment(self._branding.footer_text)))
 
         self.set_y(-10)
         self.set_font("Helvetica", "I", 7)
@@ -319,6 +364,7 @@ def _logo_ids(template):
 
 def _generate_auto_layout(req):
     branding = DocumentBranding.objects.filter(request_type=req.request_type).prefetch_related("logos").first()
+    accent_rgb = _hex_to_rgb(branding.accent_color) if branding and branding.accent_color else _ACCENT_RGB
 
     pdf = _BrandedPDF(branding)
     pdf.set_compression(False)  # PDF lisible en clair (pratique pour les tests, coût négligeable ici)
@@ -333,16 +379,17 @@ def _generate_auto_layout(req):
 
     meta_rows = [
         {"label": "Reference", "value": req.reference},
-        {"label": "Statut", "value": req.get_status_display()},
+        {"label": "Statut", "value": req.get_status_display(),
+         "color": _STATUS_COLORS.get(req.status, (0, 0, 0))},
         {"label": "Demandeur", "value": req.requester.get_full_name() or req.requester.username},
         {"label": "Soumise le",
          "value": req.submitted_at.strftime("%d/%m/%Y %H:%M") if req.submitted_at else "-"},
     ]
-    _render_two_col_row(pdf, meta_rows[0], meta_rows[1], col_width)
-    _render_two_col_row(pdf, meta_rows[2], meta_rows[3], col_width)
+    _render_two_col_row(pdf, meta_rows[0], meta_rows[1], col_width, accent_rgb)
+    _render_two_col_row(pdf, meta_rows[2], meta_rows[3], col_width, accent_rgb)
     pdf.ln(2)
 
-    pdf.set_draw_color(*_ACCENT_RGB)
+    pdf.set_draw_color(*accent_rgb)
     pdf.set_line_width(0.5)
     pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
     pdf.ln(5)
@@ -350,15 +397,15 @@ def _generate_auto_layout(req):
     for group in grouped_labeled_data(req.request_type, req.data or {}):
         if group["section"]:
             pdf.set_font("Helvetica", "B", 13)
-            pdf.set_text_color(*_ACCENT_RGB)
+            pdf.set_text_color(*accent_rgb)
             _write_line(pdf, group["section"], height=8)
-            pdf.set_draw_color(*_ACCENT_RGB)
+            pdf.set_draw_color(*accent_rgb)
             pdf.set_line_width(0.3)
             pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
             pdf.set_text_color(0, 0, 0)
             pdf.ln(3)
 
-        _render_field_rows(pdf, group["rows"], col_width)
+        _render_field_rows(pdf, group["rows"], col_width, accent_rgb)
         pdf.ln(2)
 
     return bytes(pdf.output())

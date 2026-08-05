@@ -27,6 +27,11 @@ FORM_SCHEMA = {  # Schéma A — RequestType.form_schema
                         "description": "Regroupe ce champ sous un sous-titre dans le formulaire et le "
                         "PDF (ex: 'Informations sur le demandeur') — vide = pas de regroupement.",
                     },
+                    "highlight": {
+                        "type": "boolean",
+                        "description": "Affiche ce champ en couleur de marque dans le PDF (voir "
+                        "DocumentBranding.accent_color) — pour les informations jugées importantes.",
+                    },
                 },
             },
         },
