@@ -178,6 +178,20 @@ class WorkflowEngineTests(TestCase):
         self.assertEqual(request.status, Request.Status.PENDING)
         self.assertEqual(request.current_level, 1)
 
+    def test_resubmit_updates_submitted_at(self):
+        """Retour client : "Soumise le" (détail, PDF) restait figé sur la
+        toute première soumission après une correction et une resoumission
+        — submit() mettait à jour submitted_at, resubmit() ne le faisait pas."""
+        request = self.make_request(2000)
+        engine = WorkflowEngine(request)
+        engine.submit(actor=self.employee)
+        original_submitted_at = request.submitted_at
+
+        engine.return_for_info(self.manager, "précisez le fournisseur")
+        engine.resubmit(actor=self.employee)
+        request.refresh_from_db()
+        self.assertGreater(request.submitted_at, original_submitted_at)
+
     def test_resubmit_resumes_at_current_level_when_configured(self):
         self.request_type.resume_on_resubmit = True
         self.request_type.save()

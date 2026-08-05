@@ -376,22 +376,27 @@ class DocumentBrandingAdmin(NamedFieldWidgetMixin, ModelAdmin):
         (
             "En-tête / pied de page",
             {
-                "fields": ("header_text", "footer_text"),
+                "fields": ("header_text", "footer_text", "footer_font_size", "footer_color"),
                 "description": (
                     "Affichés sur le PDF résumé de chaque demande de ce type "
                     "(voir bouton \"Télécharger le PDF\" sur une demande) — les logos "
-                    "s'ajoutent séparément ci-dessous."
+                    "s'ajoutent séparément ci-dessous. Le pied de page suit aussi "
+                    "l'espacement choisi dans \"Typographie\"."
                 ),
             },
         ),
         (
             "Couleur",
             {
-                "fields": ("accent_color",),
+                "fields": (
+                    "accent_color", "draft_color", "pending_color", "approved_color",
+                    "rejected_color", "returned_color",
+                ),
                 "description": (
-                    "Couleur des titres de section et des champs mis en évidence "
-                    "(cocher \"Mettre en évidence\" sur un champ du formulaire) — "
-                    "format #RRGGBB, ex: #1F3A5F. Laisser vide pour la couleur par défaut."
+                    "\"Couleur de marque\" : titres de section et champs mis en évidence "
+                    "(cocher \"Mettre en évidence\" sur un champ du formulaire). Les 5 couleurs "
+                    "de statut sont indépendantes — format #RRGGBB, ex: #1F3A5F. Laisser vide "
+                    "pour la couleur par défaut de chaque champ."
                 ),
             },
         ),

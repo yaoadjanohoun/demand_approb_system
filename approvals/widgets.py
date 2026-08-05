@@ -48,23 +48,26 @@ class FormSchemaBuilderWidget(forms.Textarea):
         initial_amount_field = parsed.get("amount_field", "")
 
         return mark_safe(f"""
-<div class="fsb-builder" data-textarea-id="{widget_id}" style="max-width: 720px;">
-  <table style="width:100%; border-collapse: collapse;" class="fsb-table">
+<div class="fsb-builder" data-textarea-id="{widget_id}">
+  <style>.fsb-table td {{ padding: 6px 8px; vertical-align: top; }}</style>
+  <div style="overflow-x:auto;">
+  <table style="width:100%; min-width:1150px; border-collapse: collapse;" class="fsb-table">
     <thead>
       <tr>
-        <th style="text-align:left; padding:4px;">Nom technique</th>
-        <th style="text-align:left; padding:4px;">Label affiché</th>
-        <th style="text-align:left; padding:4px;">Section</th>
-        <th style="text-align:left; padding:4px;">Type</th>
-        <th style="text-align:left; padding:4px;">Choix (si "Liste à boutons")</th>
-        <th style="text-align:left; padding:4px;">Obligatoire</th>
-        <th style="text-align:left; padding:4px;">Champ montant</th>
-        <th style="text-align:left; padding:4px;">Mettre en évidence</th>
+        <th style="text-align:left; padding:6px 8px;">Nom technique</th>
+        <th style="text-align:left; padding:6px 8px;">Label affiché</th>
+        <th style="text-align:left; padding:6px 8px;">Section</th>
+        <th style="text-align:left; padding:6px 8px;">Type</th>
+        <th style="text-align:left; padding:6px 8px;">Choix (si "Liste à boutons")</th>
+        <th style="text-align:center; padding:6px 8px;">Obligatoire</th>
+        <th style="text-align:center; padding:6px 8px;">Champ montant</th>
+        <th style="text-align:center; padding:6px 8px;">Mettre en évidence</th>
         <th></th>
       </tr>
     </thead>
     <tbody class="fsb-rows"></tbody>
   </table>
+  </div>
   <button type="button" class="fsb-add" style="margin-top:8px;">+ Ajouter un champ</button>
   <p style="color:#6b7280; font-size:0.85em; margin-top:6px;">
     "Champ montant" : à cocher sur le champ numérique utilisé par les critères d'approbation
@@ -101,7 +104,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
     nameInput.pattern = "^[a-z_]+$";
     nameInput.title = "Minuscules et underscores uniquement (ex: date_debut)";
     nameInput.value = field.name || "";
-    nameInput.style.width = "100%";
+    nameInput.style.cssText = "width:100%; min-width:120px; box-sizing:border-box;";
     nameTd.appendChild(nameInput);
 
     const labelTd = document.createElement("td");
@@ -110,7 +113,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
     labelInput.className = "fsb-label";
     labelInput.placeholder = "ex: Montant (€)";
     labelInput.value = field.label || "";
-    labelInput.style.width = "100%";
+    labelInput.style.cssText = "width:100%; min-width:150px; box-sizing:border-box;";
     labelTd.appendChild(labelInput);
 
     const sectionTd = document.createElement("td");
@@ -119,12 +122,13 @@ class FormSchemaBuilderWidget(forms.Textarea):
     sectionInput.className = "fsb-section";
     sectionInput.placeholder = "ex: Informations sur le demandeur";
     sectionInput.value = field.section || "";
-    sectionInput.style.width = "100%";
+    sectionInput.style.cssText = "width:100%; min-width:170px; box-sizing:border-box;";
     sectionTd.appendChild(sectionInput);
 
     const typeTd = document.createElement("td");
     const typeSelect = document.createElement("select");
     typeSelect.className = "fsb-type";
+    typeSelect.style.cssText = "min-width:130px;";
     TYPE_OPTIONS.forEach(function(opt) {{
       const o = document.createElement("option");
       o.value = opt[0];
@@ -140,7 +144,7 @@ class FormSchemaBuilderWidget(forms.Textarea):
     choicesInput.className = "fsb-choices";
     choicesInput.placeholder = "ex: Oui, Non, Peut-être";
     choicesInput.value = (field.choices || []).join(", ");
-    choicesInput.style.width = "100%";
+    choicesInput.style.cssText = "width:100%; min-width:170px; box-sizing:border-box;";
     choicesTd.appendChild(choicesInput);
 
     const reqTd = document.createElement("td");

@@ -76,8 +76,9 @@ _COL_GUTTER_MM = 6
 _SHORT_VALUE_MAX_CHARS = 30
 
 # Mêmes couleurs que les pastilles de statut de l'interface web (voir
-# .status-* dans app.css) — pour que le statut se reconnaisse d'un coup
-# d'œil, PDF comme écran.
+# .status-* dans app.css) par défaut — surchargeables par type de demande
+# (DocumentBranding.draft_color/pending_color/...) : retour client, la
+# couleur ne doit pas rester figée au bleu.
 _STATUS_COLORS = {
     "DRAFT": (75, 81, 96),
     "PENDING": (179, 118, 10),
@@ -85,6 +86,19 @@ _STATUS_COLORS = {
     "REJECTED": (193, 54, 43),
     "RETURNED": (29, 95, 176),
 }
+_STATUS_COLOR_FIELDS = {
+    "DRAFT": "draft_color",
+    "PENDING": "pending_color",
+    "APPROVED": "approved_color",
+    "REJECTED": "rejected_color",
+    "RETURNED": "returned_color",
+}
+
+
+def _resolve_status_color(branding, status):
+    field_name = _STATUS_COLOR_FIELDS.get(status)
+    custom = getattr(branding, field_name, "") if branding and field_name else ""
+    return _hex_to_rgb(custom) if custom else _STATUS_COLORS.get(status, (0, 0, 0))
 
 # Typographie du corps du document (voir DocumentBranding.body_font/
 # body_font_size/line_spacing/underline_values) — les hauteurs de ligne
@@ -260,8 +274,12 @@ class _BrandedPDF(FPDF):
     def footer(self):
         if self._branding and self._branding.footer_text:
             self.set_y(-18)
-            self.set_font("Helvetica", "", 8)
+            footer_size = self._branding.footer_font_size or 8
+            self.set_font("Helvetica", "", footer_size)
+            r, g, b = _hex_to_rgb(self._branding.footer_color) if self._branding.footer_color else (90, 90, 90)
+            self.set_text_color(r, g, b)
             self._write_html_no_page_break(_pdf_safe(_fix_html_alignment(self._branding.footer_text)))
+            self.set_text_color(0, 0, 0)
 
         self.set_y(-10)
         self.set_font("Helvetica", "I", 7)
@@ -431,7 +449,7 @@ def _generate_auto_layout(req):
     meta_rows = [
         {"label": "Reference", "value": req.reference},
         {"label": "Statut", "value": req.get_status_display(),
-         "color": _STATUS_COLORS.get(req.status, (0, 0, 0))},
+         "color": _resolve_status_color(branding, req.status)},
         {"label": "Demandeur", "value": req.requester.get_full_name() or req.requester.username},
         {"label": "Soumise le",
          "value": req.submitted_at.strftime("%d/%m/%Y %H:%M") if req.submitted_at else "-"},

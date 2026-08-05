@@ -198,6 +198,9 @@ class RequestType(models.Model):
         return self.name
 
 
+_HEX_COLOR_VALIDATOR = RegexValidator(r"^#[0-9A-Fa-f]{6}$", "Format attendu : #RRGGBB (ex: #1F3A5F).")
+
+
 class DocumentBranding(models.Model):
     """Habillage du PDF résumé (voir approvals/pdf_export.py) : en-tête,
     pied de page — propre à chaque type de demande, plutôt qu'un habillage
@@ -218,12 +221,41 @@ class DocumentBranding(models.Model):
         help_text="Affiché en bas de chaque page du PDF (ex: mentions légales) — mise en "
         "forme simple possible (gras/italique/souligné/alignement).",
     )
+    footer_font_size = models.PositiveIntegerField(
+        default=8,
+        validators=[MinValueValidator(6), MaxValueValidator(14)],
+        help_text="Taille de police (points) du pied de page.",
+    )
+    footer_color = models.CharField(
+        max_length=7, blank=True, validators=[_HEX_COLOR_VALIDATOR],
+        help_text="Couleur du pied de page (format #RRGGBB). Laisser vide pour un gris neutre.",
+    )
     accent_color = models.CharField(
         max_length=7,
         blank=True,
-        validators=[RegexValidator(r"^#[0-9A-Fa-f]{6}$", "Format attendu : #RRGGBB (ex: #1F3A5F).")],
+        validators=[_HEX_COLOR_VALIDATOR],
         help_text="Couleur des titres de section et des champs mis en évidence (format #RRGGBB). "
         "Laisser vide pour la couleur par défaut.",
+    )
+    draft_color = models.CharField(
+        max_length=7, blank=True, validators=[_HEX_COLOR_VALIDATOR],
+        help_text="Couleur du statut \"Brouillon\" dans le PDF. Laisser vide pour la couleur par défaut.",
+    )
+    pending_color = models.CharField(
+        max_length=7, blank=True, validators=[_HEX_COLOR_VALIDATOR],
+        help_text="Couleur du statut \"En attente\" dans le PDF. Laisser vide pour la couleur par défaut.",
+    )
+    approved_color = models.CharField(
+        max_length=7, blank=True, validators=[_HEX_COLOR_VALIDATOR],
+        help_text="Couleur du statut \"Approuvée\" dans le PDF. Laisser vide pour la couleur par défaut.",
+    )
+    rejected_color = models.CharField(
+        max_length=7, blank=True, validators=[_HEX_COLOR_VALIDATOR],
+        help_text="Couleur du statut \"Refusée\" dans le PDF. Laisser vide pour la couleur par défaut.",
+    )
+    returned_color = models.CharField(
+        max_length=7, blank=True, validators=[_HEX_COLOR_VALIDATOR],
+        help_text="Couleur du statut \"Retournée\" dans le PDF. Laisser vide pour la couleur par défaut.",
     )
     body_font = models.CharField(
         max_length=100,

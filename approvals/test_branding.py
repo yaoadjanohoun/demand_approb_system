@@ -196,7 +196,7 @@ class PdfExportBrandingTests(TestCase):
             footer_text='<div style="text-align: center;">Centre</div>',
         )
         pdf_bytes = generate_request_summary_pdf(self.req)
-        match = re.search(rb"BT ([\d.]+) [\d.]+ Td \(Centre\) Tj ET", pdf_bytes)
+        match = re.search(rb"BT ([\d.]+) [\d.]+ Td.*?\(Centre\) Tj ET", pdf_bytes)
         self.assertIsNotNone(match, "texte 'Centre' introuvable dans le flux PDF")
         x_position = float(match.group(1))
         self.assertGreater(x_position, 100, "le texte est resté aligné à gauche (marge ~28pt)")
@@ -236,6 +236,31 @@ class PdfExportBrandingTests(TestCase):
         DocumentBranding.objects.create(request_type=self.request_type, underline_values=True)
         pdf_bytes = generate_request_summary_pdf(self.req)
         self.assertIn(b" G\n", pdf_bytes)  # trait gris (set_draw_color) tracé sous une valeur
+
+    def test_custom_status_color_overrides_default_blue(self):
+        """Retour client : la couleur du statut "Retournée" (bleu par défaut)
+        doit être modifiable, pas figée."""
+        self.req.status = Request.Status.RETURNED
+        self.req.save()
+        DocumentBranding.objects.create(request_type=self.request_type, returned_color="#00FF00")
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"0 1 0 rg", pdf_bytes)
+        self.assertNotIn(b"0.1137 0.3725 0.6902 rg", pdf_bytes)  # bleu par défaut absent
+
+    def test_default_status_color_used_when_not_configured(self):
+        self.req.status = Request.Status.RETURNED
+        self.req.save()
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"0.1137 0.3725 0.6902 rg", pdf_bytes)
+
+    def test_footer_custom_size_and_color(self):
+        DocumentBranding.objects.create(
+            request_type=self.request_type, footer_text="Mentions légales",
+            footer_font_size=12, footer_color="#FF0000",
+        )
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertIn(b"12.00 Tf", pdf_bytes)
+        self.assertIn(b"1 0 0 rg", pdf_bytes)
 
     def test_no_underline_by_default(self):
         pdf_bytes = generate_request_summary_pdf(self.req)

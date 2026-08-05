@@ -439,6 +439,11 @@ class WorkflowEngine:
 
         request.full_clean()
         previous_status = request.status
+        # submit() met déjà à jour submitted_at à chaque soumission — resubmit()
+        # ne le faisait pas, donc "Soumise le" (PDF, détail) restait figé sur la
+        # toute première soumission même après une correction et une resoumission
+        # (retour client : doit refléter la dernière mise à jour, pas le début).
+        request.submitted_at = timezone.now()
 
         if request.request_type.resume_on_resubmit:
             request.status = Request.Status.PENDING
