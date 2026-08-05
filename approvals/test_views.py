@@ -957,10 +957,11 @@ class TrackLastSeenMiddlewareTests(TestCase):
 
 @override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class ReferenceFormPdfTests(TestCase):
-    """Un type de demande peut avoir un PDF de référence (ex: le formulaire
-    papier existant), affiché au demandeur (formulaire de saisie) et à
-    l'approbateur (détail de la demande) — à titre d'information seulement,
-    la saisie reste faite via form_schema."""
+    """Un type de demande peut avoir un PDF de référence (RequestType.
+    reference_form_pdf) — retour client : n'est plus affiché nulle part
+    (ni à la création, ni au détail), remplacé par un aperçu du PDF résumé
+    généré (voir "Aperçu du PDF" sur la page de détail, après soumission).
+    Le champ et le fichier restent en base pour un usage futur éventuel."""
 
     @classmethod
     def tearDownClass(cls):
@@ -981,24 +982,35 @@ class ReferenceFormPdfTests(TestCase):
         )
         self.client.login(username="employee_pdf", password="x")
 
-    def test_reference_pdf_shown_on_request_form_when_configured(self):
+    def test_reference_pdf_no_longer_shown_on_request_form(self):
         self.request_type.reference_form_pdf.save("reference.pdf", self._tiny_pdf(), save=True)
-        response = self.client.get(f"/new/{self.request_type.id}/")
-        self.assertContains(response, "Document de référence")
-        self.assertContains(response, self.request_type.reference_form_pdf.url)
-
-    def test_no_reference_pdf_panel_when_not_configured(self):
         response = self.client.get(f"/new/{self.request_type.id}/")
         self.assertNotContains(response, "Document de référence")
 
-    def test_reference_pdf_shown_on_request_detail(self):
+    def test_reference_pdf_no_longer_shown_on_request_detail(self):
         self.request_type.reference_form_pdf.save("reference.pdf", self._tiny_pdf(), save=True)
         req = Request.objects.create(
             request_type=self.request_type, requester=self.employee, data={}
         )
         response = self.client.get(f"/{req.pk}/")
-        self.assertContains(response, "Document de référence")
-        self.assertContains(response, self.request_type.reference_form_pdf.url)
+        self.assertNotContains(response, "Document de référence")
+
+    def test_generated_pdf_preview_shown_on_submitted_request_detail(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee,
+            status=Request.Status.PENDING, data={},
+        )
+        response = self.client.get(f"/{req.pk}/")
+        self.assertContains(response, "Aperçu du PDF")
+        self.assertContains(response, f"/{req.pk}/pdf/")
+
+    def test_generated_pdf_preview_not_shown_on_draft(self):
+        req = Request.objects.create(
+            request_type=self.request_type, requester=self.employee,
+            status=Request.Status.DRAFT, data={},
+        )
+        response = self.client.get(f"/{req.pk}/")
+        self.assertNotContains(response, "Aperçu du PDF")
 
 
 class RequestSummaryPdfDownloadTests(TestCase):

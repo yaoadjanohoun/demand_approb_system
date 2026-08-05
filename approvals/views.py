@@ -14,6 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template import loader
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 
 from . import reports as reports_module
 from .forms import PersonalInfoForm, ProfilePhotoForm, build_dynamic_form, grouped_labeled_data, labeled_data
@@ -480,18 +481,26 @@ def request_detail(request, pk):
 
 
 @login_required
+@xframe_options_sameorigin
 def request_download_pdf(request, pk):
     """PDF résumé téléchargeable des réponses saisies (retour client) — en
     plus du document de référence (RequestType.reference_form_pdf), généré
     à la volée à partir des mêmes données que la page de détail, pas une
-    copie remplie du PDF de référence."""
+    copie remplie du PDF de référence.
+
+    @xframe_options_sameorigin : le X-Frame-Options global du site (DENY)
+    bloquerait sinon l'aperçu intégré à la page de détail — même bug déjà
+    rencontré et corrigé pour les fichiers /media/ (voir urls.py)."""
     req = get_object_or_404(Request, pk=pk)
     if not (_can_view(request.user, req) or request.user.is_staff):
         raise PermissionDenied
 
     pdf_bytes = generate_request_summary_pdf(req)
     response = HttpResponse(pdf_bytes, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{req.reference}.pdf"'
+    # inline (pas attachment) : affiché directement dans l'aperçu intégré à
+    # la page de détail (retour client), pas seulement téléchargeable — le
+    # visualiseur PDF du navigateur permet quand même de l'enregistrer.
+    response["Content-Disposition"] = f'inline; filename="{req.reference}.pdf"'
     return response
 
 

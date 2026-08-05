@@ -33,13 +33,13 @@
         <p style="margin-top:1rem;"><a class="btn btn-primary" href="{% url 'approvals:request_edit' req.pk %}">Corriger et resoumettre</a></p>
     {% endif %}
 </div>
-{% if req.request_type.reference_form_pdf %}
+{% if req.status != "DRAFT" %}
     <div class="card" style="flex:1 1 380px; min-width:280px; max-width:480px;">
-        <div class="card-title">Document de référence</div>
-        <iframe src="{{ req.request_type.reference_form_pdf.url }}" title="Document de référence"
+        <div class="card-title">Aperçu du PDF</div>
+        <iframe src="{% url 'approvals:request_download_pdf' req.pk %}" title="Aperçu du PDF"
                 style="width:100%; height:500px; border:1px solid var(--border, #ddd); border-radius:6px;"></iframe>
         <p class="card-note" style="margin-top:0.5rem;">
-            <a href="{{ req.request_type.reference_form_pdf.url }}" target="_blank" rel="noopener">Ouvrir dans un nouvel onglet</a>
+            <a href="{% url 'approvals:request_download_pdf' req.pk %}" target="_blank" rel="noopener">Ouvrir dans un nouvel onglet</a>
         </p>
     </div>
 {% endif %}

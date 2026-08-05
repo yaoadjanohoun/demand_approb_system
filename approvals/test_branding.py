@@ -11,8 +11,39 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 
 from .forms import grouped_form_fields, grouped_labeled_data, build_dynamic_form
-from .models import BrandingLogo, DocumentBranding, Request, RequestType
+from .models import BrandingLogo, CustomFont, DocumentBranding, Request, RequestType
 from .pdf_export import generate_request_summary_pdf
+
+
+def _valid_ttf_bytes():
+    """Génère un TTF minimal mais réellement valide (fontTools, déjà une
+    dépendance de fpdf2) — un fichier bidon ne suffit pas ici : le but est
+    de tester ce qui se passe quand pdf.add_font() RÉUSSIT pour le style
+    normal mais qu'aucune variante gras n'a été fournie."""
+    import io
+
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    fb = FontBuilder(1000, isTTF=True)
+    fb.setupGlyphOrder([".notdef", "A"])
+    fb.setupCharacterMap({65: "A"})
+    pen = TTGlyphPen(None)
+    pen.moveTo((0, 0))
+    pen.lineTo((0, 500))
+    pen.lineTo((500, 500))
+    pen.lineTo((500, 0))
+    pen.closePath()
+    glyph = pen.glyph()
+    fb.setupGlyf({".notdef": glyph, "A": glyph})
+    fb.setupHorizontalMetrics({".notdef": (500, 0), "A": (500, 0)})
+    fb.setupHorizontalHeader(ascent=800, descent=-200)
+    fb.setupNameTable({"familyName": "TestFont", "styleName": "Regular"})
+    fb.setupOS2()
+    fb.setupPost()
+    buffer = io.BytesIO()
+    fb.save(buffer)
+    return buffer.getvalue()
 
 
 SCHEMA_WITH_SECTIONS = {
@@ -215,3 +246,17 @@ class PdfExportBrandingTests(TestCase):
         pdf_bytes = generate_request_summary_pdf(self.req)
         self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         self.assertIn(b"Nouveau rapport", pdf_bytes)
+
+    def test_custom_font_without_bold_variant_does_not_crash_generation(self):
+        """Bug réel observé : une police personnalisée enregistrée avec
+        succès pour son style normal (regular_ttf) mais sans variante gras
+        faisait planter la génération — le titre/les labels/les titres de
+        section demandent tous "B" (gras) sans vérifier que CE style précis
+        avait été enregistré pour cette police."""
+        font = CustomFont.objects.create(
+            name="SansGras",
+            regular_ttf=SimpleUploadedFile("sansgras.ttf", _valid_ttf_bytes(), content_type="font/ttf"),
+        )
+        DocumentBranding.objects.create(request_type=self.request_type, body_font=font.name)
+        pdf_bytes = generate_request_summary_pdf(self.req)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))

@@ -92,7 +92,10 @@ _STATUS_COLORS = {
 # "normal" ; "scale" les ajuste proportionnellement pour toute autre taille/
 # espacement choisi par l'admin.
 _SPACING_MULTIPLIERS = {"compact": 0.8, "normal": 1.0, "spacious": 1.3}
-_DEFAULT_STYLE = {"family": "Helvetica", "size": 11, "is_builtin": True, "scale": 1.0, "underline": False}
+_DEFAULT_STYLE = {
+    "family": "Helvetica", "size": 11, "is_builtin": True, "scale": 1.0,
+    "underline": False, "bold_style": "B",
+}
 
 
 def _resolve_body_style(branding, registered_fonts):
@@ -102,12 +105,20 @@ def _resolve_body_style(branding, registered_fonts):
         family = "Helvetica"  # police non enregistrée (fichier manquant/corrompu) : repli sûr
     spacing_key = branding.line_spacing if branding else "normal"
     scale = (size / 11.0) * _SPACING_MULTIPLIERS.get(spacing_key, 1.0)
+    is_builtin = family in _BUILTIN_FONT_FAMILIES
+    # Une police personnalisée peut n'avoir qu'un fichier "normal" fourni par
+    # l'admin (pas de variante gras) — utiliser "B" quand même ferait planter
+    # pdf.set_font() (police jamais enregistrée pour ce style précis). On
+    # retombe alors sur le style normal de CETTE police plutôt que de perdre
+    # la police choisie en basculant sur Helvetica.
+    bold_style = "B" if is_builtin or (family, "B") in registered_fonts else ""
     return {
         "family": family,
         "size": size,
-        "is_builtin": family in _BUILTIN_FONT_FAMILIES,
+        "is_builtin": is_builtin,
         "scale": scale,
         "underline": bool(branding and branding.underline_values),
+        "bold_style": bold_style,
     }
 
 
@@ -167,7 +178,7 @@ def _render_two_col_row(pdf, left_row, right_row, col_width, accent_rgb=_ACCENT_
 
     def render_cell(row, x):
         pdf.set_xy(x, y0)
-        pdf.set_font(family, "B", label_size)
+        pdf.set_font(family, style["bold_style"], label_size)
         _write_col_line(pdf, str(row["label"]).upper(), col_width, height=label_h, safe=is_builtin)
         pdf.set_font(family, "", style["size"])
         pdf.set_text_color(*_row_color(row, accent_rgb))
@@ -208,7 +219,7 @@ def _render_field_rows(pdf, rows, col_width, accent_rgb=_ACCENT_RGB, style=None)
             if pending is not None:
                 _render_two_col_row(pdf, pending, None, col_width, accent_rgb, style)
                 pending = None
-            pdf.set_font(family, "B", label_size)
+            pdf.set_font(family, style["bold_style"], label_size)
             _write_line(pdf, str(row["label"]).upper(), height=5 * scale, safe=is_builtin)
             pdf.set_font(family, "", style["size"])
             pdf.set_text_color(*_row_color(row, accent_rgb))
@@ -413,7 +424,7 @@ def _generate_auto_layout(req):
     pdf.add_page()
     col_width = (pdf.w - pdf.l_margin - pdf.r_margin - _COL_GUTTER_MM) / 2
 
-    pdf.set_font(family, "B", style["size"] + 5)
+    pdf.set_font(family, style["bold_style"], style["size"] + 5)
     _write_line(pdf, req.request_type.name, height=10 * scale, safe=is_builtin)
     pdf.ln(2 * scale)
 
@@ -436,7 +447,7 @@ def _generate_auto_layout(req):
 
     for group in grouped_labeled_data(req.request_type, req.data or {}):
         if group["section"]:
-            pdf.set_font(family, "B", style["size"] + 2)
+            pdf.set_font(family, style["bold_style"], style["size"] + 2)
             pdf.set_text_color(*accent_rgb)
             _write_line(pdf, group["section"], height=8 * scale, safe=is_builtin)
             pdf.set_draw_color(*accent_rgb)
