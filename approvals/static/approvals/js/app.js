@@ -5,7 +5,46 @@
 document.addEventListener("DOMContentLoaded", function () {
     initSidebarToggle();
     initConfirmModal();
+    initThemeToggle();
 });
+
+function initThemeToggle() {
+    var toggle = document.getElementById("theme-toggle");
+    var icon = document.getElementById("theme-toggle-icon");
+    var label = document.getElementById("theme-toggle-label");
+    if (!toggle || !icon || !label) return;
+
+    var systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+    function currentTheme() {
+        var explicit = document.documentElement.getAttribute("data-theme");
+        if (explicit === "light" || explicit === "dark") return explicit;
+        return systemPrefersDark.matches ? "dark" : "light";
+    }
+
+    // Le bouton propose toujours l'action inverse du thème actuellement affiché
+    // (icône/texte de CE VERS QUOI il bascule, pas de l'état actuel).
+    function updateButton() {
+        var isDark = currentTheme() === "dark";
+        icon.textContent = isDark ? "☀️" : "🌙";
+        label.textContent = isDark ? "Thème clair" : "Thème sombre";
+    }
+
+    toggle.addEventListener("click", function () {
+        var next = currentTheme() === "dark" ? "light" : "dark";
+        document.documentElement.setAttribute("data-theme", next);
+        localStorage.setItem("theme", next);
+        updateButton();
+    });
+
+    // Pas de choix explicite mémorisé : suit la préférence système en direct
+    // (ex: l'OS bascule en mode sombre au coucher du soleil).
+    systemPrefersDark.addEventListener("change", function () {
+        if (!localStorage.getItem("theme")) updateButton();
+    });
+
+    updateButton();
+}
 
 function initSidebarToggle() {
     var toggle = document.getElementById("sidebar-toggle");

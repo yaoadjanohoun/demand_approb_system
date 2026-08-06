@@ -30,7 +30,79 @@
   --sidebar-width: 248px;
   --shadow-sm: 0 1px 2px rgba(20, 22, 30, 0.06);
   --shadow-md: 0 4px 16px rgba(20, 22, 30, 0.08);
+  --status-draft-bg: #eceef1;
+  --status-draft-text: #4b5160;
+  --success-border: #b9e8d2;
+  --danger-border: #f3c6c1;
+  --warning-border: #f5dfa3;
 }
+
+/* Thème sombre : respecte la préférence système par défaut (prefers-color-scheme),
+   sauf choix explicite de l'utilisateur (data-theme posé sur <html> par le bouton
+   de la barre latérale, voir app.js — persisté en localStorage, lu avant le premier
+   rendu via un script inline dans base.html pour éviter un flash de mauvais thème). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161c;
+    --surface: #1c1f26;
+    --surface-muted: #23262f;
+    --border: #2c303a;
+    --border-strong: #3a3f4b;
+    --text: #eef0f4;
+    --text-muted: #a4a9b5;
+    --text-faint: #6f7583;
+    --accent: #8b7ff5;
+    --accent-hover: #a196ff;
+    --accent-soft: #29253f;
+    --success: #34d399;
+    --success-soft: #163229;
+    --warning: #f2b84b;
+    --warning-soft: #362a12;
+    --danger: #f2685c;
+    --danger-soft: #3a1f1c;
+    --info: #5b9bea;
+    --info-soft: #182a3d;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --status-draft-bg: #2c303a;
+    --status-draft-text: #c1c5cf;
+    --success-border: #1f4b3b;
+    --danger-border: #4d2b27;
+    --warning-border: #4a3a1c;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161c;
+  --surface: #1c1f26;
+  --surface-muted: #23262f;
+  --border: #2c303a;
+  --border-strong: #3a3f4b;
+  --text: #eef0f4;
+  --text-muted: #a4a9b5;
+  --text-faint: #6f7583;
+  --accent: #8b7ff5;
+  --accent-hover: #a196ff;
+  --accent-soft: #29253f;
+  --success: #34d399;
+  --success-soft: #163229;
+  --warning: #f2b84b;
+  --warning-soft: #362a12;
+  --danger: #f2685c;
+  --danger-soft: #3a1f1c;
+  --info: #5b9bea;
+  --info-soft: #182a3d;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --status-draft-bg: #2c303a;
+  --status-draft-text: #c1c5cf;
+  --success-border: #1f4b3b;
+  --danger-border: #4d2b27;
+  --warning-border: #4a3a1c;
+}
+
+html { color-scheme: light dark; }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 
@@ -208,7 +280,7 @@ tr:last-child td { border-bottom: none; }
 /* ---------- Status badges ---------- */
 
 .status { display: inline-block; padding: 0.2rem 0.65rem; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
-.status-DRAFT { background: #eceef1; color: #4b5160; }
+.status-DRAFT { background: var(--status-draft-bg); color: var(--status-draft-text); }
 .status-PENDING { background: var(--warning-soft); color: var(--warning); }
 .status-APPROVED { background: var(--success-soft); color: var(--success); }
 .status-REJECTED { background: var(--danger-soft); color: var(--danger); }
@@ -289,9 +361,9 @@ ul.errorlist ul.errorlist { margin: 0.3rem 0 0; padding: 0; background: none; }
   padding: 0.8rem 1rem; border-radius: var(--radius-sm); font-size: 0.88rem; font-weight: 500;
   border: 1px solid transparent; box-shadow: var(--shadow-sm);
 }
-.messages .success { background: var(--success-soft); color: var(--success); border-color: #b9e8d2; }
-.messages .error { background: var(--danger-soft); color: var(--danger); border-color: #f3c6c1; }
-.messages .warning { background: var(--warning-soft); color: var(--warning); border-color: #f5dfa3; }
+.messages .success { background: var(--success-soft); color: var(--success); border-color: var(--success-border); }
+.messages .error { background: var(--danger-soft); color: var(--danger); border-color: var(--danger-border); }
+.messages .warning { background: var(--warning-soft); color: var(--warning); border-color: var(--warning-border); }
 
 /* ---------- Detail rows ---------- */
 
