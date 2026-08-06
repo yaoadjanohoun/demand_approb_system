@@ -354,10 +354,17 @@ class PdfExportBrandingTests(TestCase):
         self.assertIn(b"Nouveau rapport", pdf_bytes)
 
 
+@override_settings(MEDIA_ROOT=tempfile.mkdtemp())
 class ApprovalSectionPdfTests(TestCase):
     """Section "Approbations" en fin de PDF : nom de l'approbateur, date, et
     sa signature dessinée une fois dans son profil (retour client : reproduire
-    la section signature du formulaire papier)."""
+    la section signature du formulaire papier).
+
+    @override_settings(MEDIA_ROOT=...) est CRITIQUE ici, pas juste une bonne
+    pratique : tearDownClass supprime tout settings.MEDIA_ROOT — sans cet
+    override, c'était le dossier media/ RÉEL du poste de dev qui partait à
+    chaque exécution de la suite de tests (bug identifié en prod locale :
+    signatures/photos/logos disparaissaient après chaque nouvelle feature)."""
 
     @classmethod
     def tearDownClass(cls):
