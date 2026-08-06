@@ -1,8 +1,11 @@
+import datetime
+
 from django import forms
 from django.contrib import admin, messages
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin, UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
 from django.db import models
+from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django_json_widget.widgets import JSONEditorWidget
@@ -15,6 +18,7 @@ from .models import (
     ApprovalLog, ApprovalRule, BrandingLogo, CustomFont, Delegation, Department, DocumentBranding,
     EmailSettings, Request, RequestAttachment, RequestType, Role, Site, UserProfile, system_role_label,
 )
+from .pdf_export import generate_request_summary_pdf
 from .services import RoutingError, WorkflowEngine
 from .validators import validate_entity_name, validate_person_name
 from .widgets import (
@@ -290,6 +294,39 @@ class ApprovalRuleInline(NamedFieldWidgetMixin, admin.TabularInline):
     field_widgets = {"criteria": CriteriaBuilderWidget, "approvers_config": ApproversConfigBuilderWidget}
 
 
+_SAMPLE_FIELD_VALUES = {
+    "text": "Exemple de texte",
+    "number": 42,
+    "decimal": 123.45,
+    "boolean": True,
+}
+
+
+def _sample_field_value(field_def):
+    field_type = field_def.get("type")
+    if field_type == "date":
+        return datetime.date.today().isoformat()
+    if field_type == "choice":
+        choices = field_def.get("choices") or []
+        return choices[0] if choices else "Option"
+    return _SAMPLE_FIELD_VALUES.get(field_type, "Exemple")
+
+
+def _build_sample_request(request_type, user):
+    """Instance de Request en mémoire (jamais enregistrée) avec des données
+    factices — une par champ du formulaire — pour prévisualiser le rendu du
+    PDF sans avoir à créer une vraie demande (voir RequestTypeAdmin.preview_pdf).
+    Le type "file" est ignoré (les pièces jointes ne font pas partie de
+    `data`, voir forms.build_dynamic_form)."""
+    fields = (request_type.form_schema or {}).get("fields", [])
+    data = {f["name"]: _sample_field_value(f) for f in fields if f.get("type") != "file"}
+    sample = Request(
+        request_type=request_type, requester=user, status=Request.Status.DRAFT, data=data,
+    )
+    sample.reference = f"APERCU-{request_type.code}"
+    return sample
+
+
 #creation du modele de requete d'approbation d'un type admin
 @admin.register(RequestType)
 class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
@@ -301,6 +338,7 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
     list_filter = ("is_active", "is_sensitive")
     search_fields = ("name", "code")
     inlines = [ApprovalRuleInline]
+    actions_detail = ["preview_pdf"]
 
     # Le lien "Concevoir le PDF" (éditeur visuel Fabric.js, voir
     # approvals/templates/approvals/document_template_editor.html) a été
@@ -309,6 +347,27 @@ class RequestTypeAdmin(NamedFieldWidgetMixin, ModelAdmin):
     # (modèle DocumentTemplate, vue, éditeur) reste en place, juste plus
     # accessible depuis cette page — l'URL /mise-en-page/<id>/ fonctionne
     # toujours pour qui en aurait besoin plus tard.
+
+    @action(
+        description="Prévisualiser le PDF",
+        url_path="apercu-pdf",
+        permissions=["view"],
+        icon="visibility",
+        attrs={"target": "_blank"},
+    )
+    def preview_pdf(self, request, object_id=None):
+        """Génère un PDF d'exemple (données factices, une par champ du
+        formulaire) pour ce type de demande — retour client : impossible de
+        juger le rendu/la typographie d'un formulaire tant qu'une vraie
+        demande n'a pas été créée et soumise. Ouvert dans un nouvel onglet
+        (attrs target=_blank), jamais enregistré en base."""
+        request_type = self.get_object(request, object_id)
+        sample_request = _build_sample_request(request_type, request.user)
+        pdf_bytes = generate_request_summary_pdf(sample_request)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = 'inline; filename="apercu.pdf"'
+        response["Cache-Control"] = "no-store"
+        return response
 
     @display(description="Règle par défaut (dernier niveau)", boolean=True)
     def default_rule_display(self, obj):
