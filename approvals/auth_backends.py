@@ -12,8 +12,11 @@ Principe ("bind authentication") :
    réussit, le mot de passe est valide (AD fait toute la vérification, aucun
    mot de passe ne transite jamais vers la base de données Django).
 3. Création/mise à jour de l'utilisateur Django (mot de passe local désactivé
-   via set_unusable_password) et synchronisation des informations de profil
-   (manager, département, site) à titre informatif.
+   via set_unusable_password) et synchronisation des informations de profil :
+   manager, et département/site — rattachés automatiquement au référentiel
+   interne (Department/Site, utilisé par le moteur de routage) quand leur nom
+   correspond exactement à celui renvoyé par l'AD, sinon laissés en texte
+   informatif pour un rattachement manuel par un admin fonctionnel.
 
 Non couvert par ce backend (hors périmètre de l'application Django) :
 Kerberos/SSO transparent, qui se configure au niveau du serveur d'hébergement
@@ -27,7 +30,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import BaseBackend
 from django.utils import timezone
 
-from .models import UserProfile
+from .models import Department, Site, UserProfile
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -120,10 +123,24 @@ class ActiveDirectoryBackend(BaseBackend):
         department_name = self._attr(entry, attr_map.get("department"))
         if department_name:
             profile.department_name = department_name
+            # Rattache automatiquement le référentiel interne (Department, utilisé
+            # par le moteur de routage) quand son nom correspond exactement à celui
+            # renvoyé par l'AD — sans ça, un admin fonctionnel devait faire ce lien
+            # à la main pour chaque utilisateur avant que le routage par
+            # département/site/rôle puisse le concerner correctement. Ne touche
+            # pas au FK si aucun nom ne correspond (ex: référentiel pas encore
+            # créé, ou faute de frappe) : le texte reste affiché pour qu'un admin
+            # fasse le lien manuellement, comme avant.
+            matched_department = Department.objects.filter(name=department_name).first()
+            if matched_department:
+                profile.department = matched_department
 
         site_name = self._attr(entry, attr_map.get("site"))
         if site_name:
             profile.site_name = site_name
+            matched_site = Site.objects.filter(name=site_name).first()
+            if matched_site:
+                profile.site = matched_site
 
         manager_dn = self._attr(entry, attr_map.get("manager"))
         if manager_dn:

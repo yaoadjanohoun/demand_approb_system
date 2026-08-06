@@ -15,7 +15,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 
 from .auth_backends import ActiveDirectoryBackend
-from .models import UserProfile
+from .models import Department, Site, UserProfile
 
 SERVICE_DN = "svc_django"
 SERVICE_PASSWORD = "service-password"
@@ -143,6 +143,38 @@ class ActiveDirectoryBackendTests(TestCase):
         user = self.backend.authenticate(None, username="jdupont", password=JDUPONT_PASSWORD)
         profile = UserProfile.objects.get(user=user)
         self.assertIsNone(profile.manager)
+
+    def test_department_and_site_auto_linked_when_names_match_referential(self, _mock_conn):
+        department = Department.objects.create(name="IT")
+        site = Site.objects.create(name="Paris")
+        user = self.backend.authenticate(None, username="jdupont", password=JDUPONT_PASSWORD)
+        profile = UserProfile.objects.get(user=user)
+        self.assertEqual(profile.department_id, department.id)
+        self.assertEqual(profile.site_id, site.id)
+
+    def test_department_left_unlinked_when_no_referential_match(self, _mock_conn):
+        """Ni erreur ni FK forcé : le texte AD reste affiché (department_name)
+        pour qu'un admin fonctionnel fasse le rattachement manuellement — ex:
+        référentiel Department pas encore créé pour ce nom, ou faute de frappe."""
+        user = self.backend.authenticate(None, username="jdupont", password=JDUPONT_PASSWORD)
+        profile = UserProfile.objects.get(user=user)
+        self.assertIsNone(profile.department)
+        self.assertEqual(profile.department_name, "IT")
+
+    def test_department_resync_updates_fk_if_ad_name_changes_to_another_match(self, _mock_conn):
+        """Une personne mutée dans un autre département doit voir son profil
+        se corriger tout seul à sa prochaine connexion, pas rester bloqué sur
+        l'ancien FK choisi manuellement à l'époque."""
+        old_department = Department.objects.create(name="Ancien")
+        new_department = Department.objects.create(name="IT")
+        user = self.backend.authenticate(None, username="jdupont", password=JDUPONT_PASSWORD)
+        profile = UserProfile.objects.get(user=user)
+        profile.department = old_department
+        profile.save()
+
+        self.backend.authenticate(None, username="jdupont", password=JDUPONT_PASSWORD)
+        profile.refresh_from_db()
+        self.assertEqual(profile.department_id, new_department.id)
 
     def test_wrong_password_returns_none(self, _mock_conn):
         self.assertIsNone(
